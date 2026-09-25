@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FightingGame</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Any PNGs or JPGs you drop in Sprites/<CharacterName> or root get copied next to the .exe automatically. -->
+    <None Include="Sprites\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Sprites\**\*.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="*.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Combat sound effects — basic_*.wav are generated placeholders; drop your own
+         Special sfx into Sounds/Special/<CharacterName>.wav (e.g. Warrior.wav). -->
+    <None Include="Sounds\**\*.wav" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
