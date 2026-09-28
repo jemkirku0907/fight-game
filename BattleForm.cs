@@ -790,32 +790,20 @@ namespace FightingGame
             pnlCharSelect.Controls.Add(btnFight);
         }
 
-        private static string GetArchetype(string type) => type switch
-        {
-            "Warrior" => "TANK",
-            "Ninja" => "SPEED",
-            "Mage" => "BURST",
-            "Disciple" => "SHADOW",
-            "Gunner" => "RANGED",
-            "Baller" => "MAMA DUNK",
-            _ => "FIGHTER"
-        };
-
         private Button MakeCharTile(string type, int x, int y, int w, int h)
         {
             string label = type == "Baller" ? "RENE" : type.ToUpper();
-            string sub = $"[ {GetArchetype(type)} ]";
             var btn = new Button
             {
                 Location = new Point(x, y),
                 Size = new Size(w, h),
                 BackColor = Color.FromArgb(215, 18, 16, 30),
                 ForeColor = Color.White,
-                Text = $"{label}\n{sub}",
+                Text = label,
                 TextImageRelation = TextImageRelation.ImageAboveText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.BottomCenter,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
