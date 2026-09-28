@@ -12,7 +12,7 @@ namespace FightingGame
         {
             var characters = new (string Name, string PreferredSrc, int FrameCount, int UseFrame, Color ThemeColor, Color SpeedLineColor, float EyeXRatio, float EyeYRatio)[]
             {
-                ("Disciple", "special.png", 4, 0, Color.DarkViolet, Color.FromArgb(200, 140, 255), 0.50f, 0.28f),
+                ("Disciple", "idle.png",    4, 0, Color.DarkViolet, Color.FromArgb(200, 140, 255), 0.50f, 0.28f),
                 ("Mage",     "idle.png",    8, 0, Color.Crimson,    Color.FromArgb(255, 120, 30),  0.50f, 0.35f),
                 ("Gunner",   "special.png", 4, 0, Color.Gold,       Color.FromArgb(255, 215, 60),  0.55f, 0.34f),
                 ("Ninja",    "idle.png",    3, 0, Color.Cyan,       Color.FromArgb(50, 230, 255),  0.50f, 0.35f),
@@ -37,9 +37,8 @@ namespace FightingGame
                     if (!Directory.Exists(charDir)) continue;
 
                     string cutinPath = Path.Combine(charDir, "cutin.png");
-                    string portraitPath = Path.Combine(charDir, "portrait.png");
 
-                    if (!File.Exists(cutinPath) || !File.Exists(portraitPath))
+                    if (!File.Exists(cutinPath))
                     {
                         GenerateCharCutIn(charDir, ch.Name, ch.PreferredSrc, ch.FrameCount, ch.UseFrame, ch.ThemeColor, ch.SpeedLineColor, ch.EyeXRatio, ch.EyeYRatio);
                     }
@@ -50,7 +49,6 @@ namespace FightingGame
         private static void GenerateCharCutIn(string dir, string name, string preferredSrc, int frameCount, int useFrame, Color theme, Color speedLineCol, float eyeXRatio, float eyeYRatio)
         {
             string cutinPath = Path.Combine(dir, "cutin.png");
-            string portraitPath = Path.Combine(dir, "portrait.png");
 
             string srcPath = Path.Combine(dir, preferredSrc);
             if (!File.Exists(srcPath)) srcPath = Path.Combine(dir, "idle.png");
@@ -85,31 +83,28 @@ namespace FightingGame
             int charW = Math.Max(1, maxX - minX + 1);
             int charH = Math.Max(1, maxY - minY + 1);
 
-            // 1. Generate 130x165 portrait focusing on the head & upper torso
+            // 1. Generate in-memory portrait focusing on the head & upper torso (130x165)
             const int portW = 130, portH = 165;
-            using (var portraitBmp = new Bitmap(portW, portH, PixelFormat.Format32bppArgb))
+            using var portImg = new Bitmap(portW, portH, PixelFormat.Format32bppArgb);
+            using (var gp = Graphics.FromImage(portImg))
             {
-                using (var gp = Graphics.FromImage(portraitBmp))
-                {
-                    gp.Clear(Color.Transparent);
-                    gp.InterpolationMode = InterpolationMode.NearestNeighbor;
-                    gp.PixelOffsetMode = PixelOffsetMode.Half;
+                gp.Clear(Color.Transparent);
+                gp.InterpolationMode = InterpolationMode.NearestNeighbor;
+                gp.PixelOffsetMode = PixelOffsetMode.Half;
 
-                    // Crop upper 65% of character (head & chest)
-                    int cropX = Math.Max(0, minX - 3);
-                    int cropY = Math.Max(0, minY - 2);
-                    int cropW = Math.Min(fw - cropX, charW + 6);
-                    int cropH = Math.Min(fh - cropY, Math.Max(16, (int)(charH * 0.68f)));
+                // Crop upper 68% of character (head & chest)
+                int cropX = Math.Max(0, minX - 3);
+                int cropY = Math.Max(0, minY - 2);
+                int cropW = Math.Min(fw - cropX, charW + 6);
+                int cropH = Math.Min(fh - cropY, Math.Max(16, (int)(charH * 0.68f)));
 
-                    float scale = Math.Min((portW * 0.88f) / cropW, (portH * 0.88f) / cropH);
-                    int dw = (int)(cropW * scale);
-                    int dh = (int)(cropH * scale);
-                    int dx = (portW - dw) / 2;
-                    int dy = (portH - dh) / 2;
+                float scale = Math.Min((portW * 0.88f) / cropW, (portH * 0.88f) / cropH);
+                int dw = (int)(cropW * scale);
+                int dh = (int)(cropH * scale);
+                int dx = (portW - dw) / 2;
+                int dy = (portH - dh) / 2;
 
-                    gp.DrawImage(srcStrip, new Rectangle(dx, dy, dw, dh), new Rectangle(frameOffset + cropX, cropY, cropW, cropH), GraphicsUnit.Pixel);
-                }
-                portraitBmp.Save(portraitPath, ImageFormat.Png);
+                gp.DrawImage(srcStrip, new Rectangle(dx, dy, dw, dh), new Rectangle(frameOffset + cropX, cropY, cropW, cropH), GraphicsUnit.Pixel);
             }
 
             // 2. Generate 6-frame Tekken-style Rage Art cut-in strip (1320x220)
@@ -120,8 +115,6 @@ namespace FightingGame
                 {
                     gCut.Clear(Color.Transparent);
                     gCut.PixelOffsetMode = PixelOffsetMode.Half;
-
-                    using var portImg = Image.FromFile(portraitPath);
 
                     for (int f = 0; f < count; f++)
                     {

@@ -777,25 +777,28 @@ namespace FightingGame
             return btn;
         }
 
-        // Loads dedicated portrait.png if present, otherwise crops frame 0 out of idle.png
+        // Loads dedicated portrait.png for Baller (Rene), otherwise loads full normal form from idle.png
         private static Bitmap? LoadPortrait(string type, int targetHeight = 110)
         {
-            string portraitPath = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "portrait.png");
-            if (File.Exists(portraitPath))
+            if (type == "Baller")
             {
-                try
+                string portraitPath = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "portrait.png");
+                if (File.Exists(portraitPath))
                 {
-                    using var full = Image.FromFile(portraitPath);
-                    float scale = targetHeight / (float)full.Height;
-                    int destW = Math.Max(1, (int)(full.Width * scale));
-                    var bmp = new Bitmap(destW, targetHeight);
-                    using var g = Graphics.FromImage(bmp);
-                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    g.PixelOffsetMode = PixelOffsetMode.Half;
-                    g.DrawImage(full, 0, 0, destW, targetHeight);
-                    return bmp;
+                    try
+                    {
+                        using var full = Image.FromFile(portraitPath);
+                        float scale = targetHeight / (float)full.Height;
+                        int destW = Math.Max(1, (int)(full.Width * scale));
+                        var bmp = new Bitmap(destW, targetHeight);
+                        using var g = Graphics.FromImage(bmp);
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        g.PixelOffsetMode = PixelOffsetMode.Half;
+                        g.DrawImage(full, 0, 0, destW, targetHeight);
+                        return bmp;
+                    }
+                    catch { }
                 }
-                catch { }
             }
 
             string path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "idle.png");
