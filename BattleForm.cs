@@ -1444,7 +1444,7 @@ namespace FightingGame
             float textY = bandY + 12f;
 
             // Header line: Character name & awakening
-            string charTag = $"★ {introAttacker.Character.GetName().ToUpper()} // RAGE ART ACTIVATED ★";
+            string charTag = $"{introAttacker.Character.GetName().ToUpper()} // RAGE ART ACTIVATED";
             using (var tagFont = new Font("Segoe UI Black", 12f, FontStyle.Bold))
             using (var tagBrush = new SolidBrush(Color.FromArgb(alpha, Color.FromArgb(0, 210, 255))))
             {
