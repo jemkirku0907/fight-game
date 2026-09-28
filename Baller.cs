@@ -2,13 +2,14 @@ using System;
 
 namespace FightingGame
 {
-    // High-flying basketball player with mid-range basketball projectile throws
-    // and an explosive "MAMA DUNK" aerial posterizer ultimate.
+    // High-flying basketball player Rene Clert Baterbonia with mid-range basketball projectile throws
+    // and an explosive target-locked "MAMA DUNK" aerial posterizer ultimate.
     public class Baller : Character
     {
         private const int DunkHits = 3;
 
-        public Baller(string name) : base(name, maxHp: 100, attackPower: 13, defensePower: 5)
+        public Baller(string name = "Rene Clert Baterbonia")
+            : base(string.IsNullOrWhiteSpace(name) || name == "Baller" ? "Rene Clert Baterbonia" : name, maxHp: 100, attackPower: 13, defensePower: 5)
         {
         }
 
@@ -20,7 +21,7 @@ namespace FightingGame
 
         public override void SpecialAttack(Character target)
         {
-            Log($"{GetName()} screams 'MAMAAAAA!' and executes a vicious POSTER SLAM DUNK ({DunkHits} rim-rocking hits)!");
+            Log($"{GetName()} targets {target.GetName()}, screams 'MAMAAAAA!' and executes a vicious TARGET-LOCKED POSTER SLAM DUNK ({DunkHits} rim-rocking hits)!");
             for (int i = 0; i < DunkHits && target.IsAlive(); i++)
             {
                 int dmg = i switch

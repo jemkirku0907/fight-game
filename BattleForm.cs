@@ -750,17 +750,18 @@ namespace FightingGame
 
         private Button MakeCharTile(string type, int x, int y, int w, int h)
         {
+            string label = type == "Baller" ? "Rene Clert\nBaterbonia" : type;
             var btn = new Button
             {
                 Location = new Point(x, y),
                 Size = new Size(w, h),
                 BackColor = Color.FromArgb(200, 18, 14, 32),
                 ForeColor = Color.White,
-                Text = type,
+                Text = label,
                 TextImageRelation = TextImageRelation.ImageAboveText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.BottomCenter,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Font = new Font("Segoe UI", type == "Baller" ? 8.5f : 10f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
@@ -846,7 +847,7 @@ namespace FightingGame
             "Mage" => new Mage(name),
             "Disciple" => new Disciple(name),
             "Gunner" => new Gunner(name),
-            "Baller" => new Baller(name),
+            "Baller" => new Baller(name == "Baller" ? "Rene Clert Baterbonia" : name),
             _ => new Warrior(name)
         };
 
@@ -865,8 +866,8 @@ namespace FightingGame
         {
             string p1Type = p1SelectedType!;
             string p2Type = p2SelectedType!;
-            string p1Name = p1Type;
-            string p2Name = p2Type;
+            string p1Name = p1Type == "Baller" ? "Rene Clert Baterbonia" : p1Type;
+            string p2Name = p2Type == "Baller" ? "Rene Clert Baterbonia" : p2Type;
 
             p1Char = CreateCharacter(p1Type, p1Name);
             p2Char = CreateCharacter(p2Type, p2Name);
@@ -1015,7 +1016,11 @@ namespace FightingGame
                      text.Contains("BULLET STORM", StringComparison.OrdinalIgnoreCase) ||
                      text.Contains("MAMA", StringComparison.OrdinalIgnoreCase) ||
                      text.Contains("SLAM DUNK", StringComparison.OrdinalIgnoreCase) ||
-                     text.Contains("BASKETBALL", StringComparison.OrdinalIgnoreCase))
+                     text.Contains("BASKETBALL", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("RENE", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("BATERBONIA", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("TARGET-LOCKED", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("TARGET LOCK", StringComparison.OrdinalIgnoreCase))
                 color = Color.Gold;
             else if (text.Contains("misses", StringComparison.OrdinalIgnoreCase) || text.Contains("too far", StringComparison.OrdinalIgnoreCase))
                 color = Color.Gray;
@@ -1729,19 +1734,14 @@ namespace FightingGame
             attacker.AttackCooldown = special ? SpecialCooldownMs : BasicCooldownMs;
             attacker.LastAttackWasSpecial = special;
 
-            float reach = isRanged ? GunnerMidRange : (isBaller && special ? 360f : (special ? SpecialReach : BasicReach));
+            float reach = isRanged ? GunnerMidRange : (isBaller && special ? 9999f : (special ? SpecialReach : BasicReach));
             float distDelta = defender.PosX - attacker.PosX;
             bool facingTarget = (distDelta * attacker.FacingSign) >= -30f;
             float distance = MathF.Abs(distDelta);
-            bool willConnect = facingTarget && distance <= reach;
+            bool willConnect = (isBaller && special) || (facingTarget && distance <= reach);
 
-            float lungeDist = isRanged ? (isGunner ? -14f : -10f) : (isBaller && special ? Math.Clamp(distDelta * 0.82f, -260f, 260f) : (special ? 95f : 70f));
+            float lungeDist = isRanged ? (isGunner ? -14f : -10f) : (isBaller && special ? (distance - 30f) : (special ? 95f : 70f));
             if (!isRanged && !willConnect) lungeDist *= 0.55f;
-
-            if (isBaller && special)
-            {
-                attacker.VerticalVelocity = JumpPower * 1.35f;
-            }
 
             if (special)
             {
@@ -1893,7 +1893,37 @@ namespace FightingGame
                 }
             }
 
-            await Lunge(attacker, lungeDist, special ? (isRanged ? 130 : 200) : (isRanged ? 90 : 160));
+            if (isBaller && special)
+            {
+                // Target Lock: automatically re-track enemy position anywhere on the field
+                float currentDelta = defender.PosX - attacker.PosX;
+                if (MathF.Abs(currentDelta) > 1f)
+                    attacker.FacingSign = MathF.Sign(currentDelta);
+
+                AppendLog($"🎯 [TARGET LOCK] {attacker.Character.GetName()} locks on {defender.Character.GetName()} — AUTOMATIC HOMING DUNK!");
+
+                // High stratosphere leap into the air
+                attacker.VerticalVelocity = JumpPower * 1.55f;
+
+                // Automatic target-tracking flight across the entire screen right above the opponent
+                float homeDist = Math.Max(0f, MathF.Abs(currentDelta) - 30f);
+
+                await Tween(250, t =>
+                {
+                    float e = EaseOutCubic(t);
+                    attacker.LungeOffset = homeDist * e;
+                    attacker.PunchProgress = e;
+                });
+
+                // Meteorite slam dunk touchdown directly on defender
+                attacker.VerticalVelocity = -JumpPower * 2.5f;
+                attacker.JumpHeight = 0f;
+                willConnect = true;
+            }
+            else
+            {
+                await Lunge(attacker, lungeDist, special ? (isRanged ? 130 : 200) : (isRanged ? 90 : 160));
+            }
 
             if (willConnect)
             {
@@ -1922,6 +1952,7 @@ namespace FightingGame
                     _ = SpawnBoom(defender.PosX, defender.GroundY - 90f, boomColor);
                     if (isBaller)
                     {
+                        _ = SpawnFloatingText(defender, "💥 TARGET LOCKED! POSTER DUNK! 💥", Color.Gold, 18f);
                         _ = SpawnBoom(defender.PosX + 25f, defender.GroundY - 30f, Color.Gold);
                         _ = SpawnBoom(defender.PosX - 25f, defender.GroundY - 30f, Color.OrangeRed);
                     }

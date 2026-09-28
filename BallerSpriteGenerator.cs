@@ -41,7 +41,7 @@ namespace FightingGame
                     GenerateStrip(Path.Combine(dir, "hit.png"), 1, DrawHit);
                     GenerateStrip(Path.Combine(dir, "ko.png"), 2, DrawKo);
 
-                    GenerateCutIn(Path.Combine(dir, "cutin.png"), Path.Combine(dir, "portrait.png"));
+                    GeneratePixelPortraitAndCutIn(dir);
                 }
 
                 // Ensure sound file
@@ -346,43 +346,153 @@ namespace FightingGame
             g.FillRectangle(shoes, cx + 28f, cy - 5f, 5f, 5f);
         }
 
-        private static void GenerateCutIn(string path, string portraitPath)
+        private static void GeneratePixelPortraitAndCutIn(string dir)
         {
-            if (File.Exists(path) || !File.Exists(portraitPath)) return;
+            string portraitPath = Path.Combine(dir, "portrait.png");
+            string cutinPath = Path.Combine(dir, "cutin.png");
 
-            const int fw = 220, fh = 220, count = 6;
-            using var bmp = new Bitmap(fw * count, fh);
-            using var g = Graphics.FromImage(bmp);
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-
-            using var portImg = Image.FromFile(portraitPath);
-
-            for (int f = 0; f < count; f++)
+            string sourceImgPath = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790575599861.png";
+            Image? raw = null;
+            if (File.Exists(sourceImgPath))
             {
-                float zoom = 1.0f + f * 0.06f;
-                int dw = (int)(fw * zoom);
-                int dh = (int)(fh * zoom);
-                int dx = f * fw + (fw - dw) / 2;
-                int dy = (fh - dh) / 2;
+                try { raw = Image.FromFile(sourceImgPath); } catch { }
+            }
+            if (raw == null && File.Exists(portraitPath))
+            {
+                try { raw = Image.FromFile(portraitPath); } catch { }
+            }
+            if (raw == null) return;
 
-                g.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
-
-                // Pulsing energy aura
-                int a = 40 + f * 30;
-                using var auraPen = new Pen(Color.FromArgb(a, Color.Gold), 3f + f * 1.5f);
-                g.DrawRectangle(auraPen, f * fw + 4, 4, fw - 8, fh - 8);
-
-                // Speed lines
-                using var sparkPen = new Pen(Color.FromArgb(120 + f * 20, Color.White), 2f);
-                for (int s = 0; s < 4; s++)
+            // Low-res pixel grid: 44 x 56 pixels (Authentic Street Fighter / Neo-Geo portrait resolution)
+            const int pw = 44, ph = 56;
+            using (var pixelGrid = new Bitmap(pw, ph, PixelFormat.Format32bppArgb))
+            {
+                using (var gSmall = Graphics.FromImage(pixelGrid))
                 {
-                    float sx = f * fw + 20f + s * 45f;
-                    g.DrawLine(sparkPen, sx, 10f, sx + 25f, 45f);
+                    gSmall.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    if (raw.Width > 300)
+                    {
+                        int srcX = (int)(raw.Width * 0.15f);
+                        int srcY = (int)(raw.Height * 0.08f);
+                        int srcW = (int)(raw.Width * 0.70f);
+                        int srcH = (int)(raw.Height * 0.65f);
+                        gSmall.DrawImage(raw, new Rectangle(0, 0, pw, ph), new Rectangle(srcX, srcY, srcW, srcH), GraphicsUnit.Pixel);
+                    }
+                    else
+                    {
+                        gSmall.DrawImage(raw, new Rectangle(0, 0, pw, ph), new Rectangle(0, 0, raw.Width, raw.Height), GraphicsUnit.Pixel);
+                    }
+                }
+                raw.Dispose();
+
+                // Quantize into 16-bit arcade palette
+                for (int y = 0; y < ph; y++)
+                {
+                    for (int x = 0; x < pw; x++)
+                    {
+                        var col = pixelGrid.GetPixel(x, y);
+                        if (col.A < 20) continue;
+
+                        int r = Math.Clamp((col.R / 32) * 32 + 16, 0, 255);
+                        int g = Math.Clamp((col.G / 32) * 32 + 16, 0, 255);
+                        int b = Math.Clamp((col.B / 32) * 32 + 16, 0, 255);
+
+                        if (r > 130 && g < 75 && b < 75)
+                        {
+                            r = 220; g = 30; b = 30; // Vibrant arcade red jersey
+                        }
+                        else if (r > 170 && g > 130 && b < 60)
+                        {
+                            r = 245; g = 190; b = 25; // Gold jersey trim / numbers
+                        }
+                        else if (r > 180 && g > 90 && b < 50)
+                        {
+                            r = 245; g = 115; b = 20; // Basketball orange
+                        }
+
+                        pixelGrid.SetPixel(x, y, Color.FromArgb(col.A, r, g, b));
+                    }
+                }
+
+                // Upscale with NearestNeighbor to crisp retro arcade portrait (132 x 168)
+                const int targetW = 132, targetH = 168;
+                using (var upscaled = new Bitmap(targetW, targetH, PixelFormat.Format32bppArgb))
+                {
+                    using (var gBig = Graphics.FromImage(upscaled))
+                    {
+                        gBig.InterpolationMode = InterpolationMode.NearestNeighbor;
+                        gBig.PixelOffsetMode = PixelOffsetMode.Half;
+                        gBig.SmoothingMode = SmoothingMode.None;
+
+                        // Deep arcade dark background behind player
+                        using var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, targetW, targetH), Color.FromArgb(40, 12, 22), Color.FromArgb(14, 8, 18), LinearGradientMode.Vertical);
+                        gBig.FillRectangle(bgBrush, 0, 0, targetW, targetH);
+
+                        gBig.DrawImage(pixelGrid, new Rectangle(0, 0, targetW, targetH), new Rectangle(0, 0, pw, ph), GraphicsUnit.Pixel);
+
+                        // Arcade gold border
+                        using var borderPen = new Pen(Color.FromArgb(245, 210, 40), 3f);
+                        gBig.DrawRectangle(borderPen, 1, 1, targetW - 2, targetH - 2);
+                    }
+
+                    upscaled.Save(portraitPath, ImageFormat.Png);
                 }
             }
 
-            bmp.Save(path, ImageFormat.Png);
+            // Create pixel cutin strip for 3-second super intro
+            const int fw = 220, fh = 220, count = 6;
+            using (var cutinBmp = new Bitmap(fw * count, fh, PixelFormat.Format32bppArgb))
+            {
+                using (var gCut = Graphics.FromImage(cutinBmp))
+                {
+                    gCut.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    gCut.PixelOffsetMode = PixelOffsetMode.Half;
+                    gCut.SmoothingMode = SmoothingMode.None;
+
+                    using var portImg = Image.FromFile(portraitPath);
+
+                    for (int f = 0; f < count; f++)
+                    {
+                        int ox = f * fw;
+                        using var bgBrush = new LinearGradientBrush(new Rectangle(ox, 0, fw, fh), Color.FromArgb(32, 10, 16), Color.FromArgb(10, 6, 14), 45f);
+                        gCut.FillRectangle(bgBrush, ox, 0, fw, fh);
+
+                        float zoom = 1.0f + f * 0.08f;
+                        int dw = (int)(fw * zoom);
+                        int dh = (int)(fh * zoom);
+                        int dx = ox + (fw - dw) / 2;
+                        int dy = (fh - dh) / 2;
+
+                        gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
+
+                        // Pixel speedlines
+                        using var linePen = new Pen(Color.FromArgb(140 + f * 20, Color.Gold), 3f);
+                        for (int s = 0; s < 5; s++)
+                        {
+                            float sx = ox + 15f + s * 42f;
+                            gCut.DrawLine(linePen, sx, 0, sx + 30f, fh);
+                        }
+
+                        // Tekken Rage Art red eye flare in later frames
+                        if (f >= 2)
+                        {
+                            float eyeX = ox + fw * 0.44f;
+                            float eyeY = fh * 0.30f - (f * 1.5f);
+                            float flareSize = 6f + (f - 2) * 5f;
+                            using var eyeGleam = new SolidBrush(Color.FromArgb(230, Color.OrangeRed));
+                            using var eyeCore = new SolidBrush(Color.White);
+                            gCut.FillRectangle(eyeGleam, eyeX - flareSize, eyeY - 2f, flareSize * 2f, 4f);
+                            gCut.FillRectangle(eyeGleam, eyeX - 2f, eyeY - flareSize, 4f, flareSize * 2f);
+                            gCut.FillRectangle(eyeCore, eyeX - 2f, eyeY - 2f, 4f, 4f);
+                        }
+
+                        using var borderPen = new Pen(Color.FromArgb(200, Color.OrangeRed), 3f);
+                        gCut.DrawRectangle(borderPen, ox + 1, 1, fw - 2, fh - 2);
+                    }
+                }
+
+                cutinBmp.Save(cutinPath, ImageFormat.Png);
+            }
         }
     }
 }
