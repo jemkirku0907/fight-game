@@ -117,6 +117,19 @@ namespace FightingGame
             { AnimState.KO, 1 },
         };
 
+        // Frame counts for Baller (Basketball player).
+        public static readonly Dictionary<AnimState, int> BallerFrameCounts = new()
+        {
+            { AnimState.Idle, 4 },
+            { AnimState.Walk, 4 },
+            { AnimState.Jump, 1 },
+            { AnimState.Attack, 4 },
+            { AnimState.Special, 6 },
+            { AnimState.Block, 2 },
+            { AnimState.Hit, 1 },
+            { AnimState.KO, 2 },
+        };
+
         private readonly Dictionary<AnimState, SpriteStrip> strips = new();
 
         // Frames per second used to play every strip. Idle/Walk loop;

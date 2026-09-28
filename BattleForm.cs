@@ -34,7 +34,7 @@ namespace FightingGame
         private bool isHoveringExit = false;
 
         // ---- Character select controls ----
-        private static readonly string[] RosterNames = { "Warrior", "Ninja", "Mage", "Disciple", "Gunner" };
+        private static readonly string[] RosterNames = { "Warrior", "Ninja", "Mage", "Disciple", "Gunner", "Baller" };
         private readonly Dictionary<string, Button> p1Tiles = new();
         private readonly Dictionary<string, Button> p2Tiles = new();
         private readonly Button btnFight = new();
@@ -123,6 +123,8 @@ namespace FightingGame
 
         public BattleForm()
         {
+            BallerSpriteGenerator.EnsureSprites();
+
             Text = "Simple Fighting Game";
             ClientSize = new Size(1200, 800);
             MinimumSize = new Size(950, 680);
@@ -772,27 +774,44 @@ namespace FightingGame
             return btn;
         }
 
-        // Crops frame 0 out of a character's idle.png so the select screen
-        // shows real sprite art with no separate portrait files needed.
+        // Loads dedicated portrait.png if present, otherwise crops frame 0 out of idle.png
         private static Bitmap? LoadPortrait(string type, int targetHeight = 110)
         {
+            string portraitPath = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "portrait.png");
+            if (File.Exists(portraitPath))
+            {
+                try
+                {
+                    using var full = Image.FromFile(portraitPath);
+                    float scale = targetHeight / (float)full.Height;
+                    int destW = Math.Max(1, (int)(full.Width * scale));
+                    var bmp = new Bitmap(destW, targetHeight);
+                    using var g = Graphics.FromImage(bmp);
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    g.PixelOffsetMode = PixelOffsetMode.Half;
+                    g.DrawImage(full, 0, 0, destW, targetHeight);
+                    return bmp;
+                }
+                catch { }
+            }
+
             string path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "idle.png");
             if (!File.Exists(path)) return null;
 
-            using var full = Image.FromFile(path);
+            using var idleImg = Image.FromFile(path);
             int frameCount = Math.Max(1, FrameCountsFor(type)[AnimState.Idle]);
-            int frameW = Math.Max(1, full.Width / frameCount);
-            int frameH = full.Height;
+            int frameW = Math.Max(1, idleImg.Width / frameCount);
+            int frameH = idleImg.Height;
 
-            float scale = targetHeight / (float)frameH;
-            int destW = Math.Max(1, (int)(frameW * scale));
+            float s = targetHeight / (float)frameH;
+            int dW = Math.Max(1, (int)(frameW * s));
 
-            var bmp = new Bitmap(destW, targetHeight);
-            using var g = Graphics.FromImage(bmp);
-            g.InterpolationMode = InterpolationMode.NearestNeighbor;
-            g.PixelOffsetMode = PixelOffsetMode.Half;
-            g.DrawImage(full, new Rectangle(0, 0, destW, targetHeight), new Rectangle(0, 0, frameW, frameH), GraphicsUnit.Pixel);
-            return bmp;
+            var result = new Bitmap(dW, targetHeight);
+            using var gr = Graphics.FromImage(result);
+            gr.InterpolationMode = InterpolationMode.NearestNeighbor;
+            gr.PixelOffsetMode = PixelOffsetMode.Half;
+            gr.DrawImage(idleImg, new Rectangle(0, 0, dW, targetHeight), new Rectangle(0, 0, frameW, frameH), GraphicsUnit.Pixel);
+            return result;
         }
 
         private void RefreshTileHighlights()
@@ -827,6 +846,7 @@ namespace FightingGame
             "Mage" => new Mage(name),
             "Disciple" => new Disciple(name),
             "Gunner" => new Gunner(name),
+            "Baller" => new Baller(name),
             _ => new Warrior(name)
         };
 
@@ -837,6 +857,7 @@ namespace FightingGame
             "Mage" => SpriteSet.MageFrameCounts,
             "Disciple" => SpriteSet.DiscipleFrameCounts,
             "Gunner" => SpriteSet.GunnerFrameCounts,
+            "Baller" => SpriteSet.BallerFrameCounts,
             _ => SpriteSet.FumikoFrameCounts
         };
 
@@ -991,7 +1012,10 @@ namespace FightingGame
                      text.Contains("DRAGON BLADE", StringComparison.OrdinalIgnoreCase) ||
                      text.Contains("SHADOW OMNI", StringComparison.OrdinalIgnoreCase) ||
                      text.Contains("DEMONIC SHADOW", StringComparison.OrdinalIgnoreCase) ||
-                     text.Contains("BULLET STORM", StringComparison.OrdinalIgnoreCase))
+                     text.Contains("BULLET STORM", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("MAMA", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("SLAM DUNK", StringComparison.OrdinalIgnoreCase) ||
+                     text.Contains("BASKETBALL", StringComparison.OrdinalIgnoreCase))
                 color = Color.Gold;
             else if (text.Contains("misses", StringComparison.OrdinalIgnoreCase) || text.Contains("too far", StringComparison.OrdinalIgnoreCase))
                 color = Color.Gray;
@@ -1391,7 +1415,8 @@ namespace FightingGame
             Fireball,
             Meteor,
             ShadowOrb,
-            DemonicWave
+            DemonicWave,
+            Basketball
         }
 
         private sealed class BulletProjectile
@@ -1545,6 +1570,48 @@ namespace FightingGame
                     using (var ethWhite = new SolidBrush(Color.White))
                         g.FillEllipse(ethWhite, b.X - r * 0.28f, b.Y - r * 0.28f, r * 0.56f, r * 0.56f);
                 }
+                else if (b.Type == ProjectileType.Basketball)
+                {
+                    // Spinning Molten Basketball (Baller Basic)
+                    float r = b.Radius > 0 ? b.Radius : 14f;
+                    float tailLen = 32f;
+                    float tailX = b.X - sign * tailLen;
+
+                    // Motion trail streaks
+                    using (var trailPen = new Pen(Color.FromArgb(140, 255, 140, 20), r * 1.1f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                        g.DrawLine(trailPen, tailX, b.Y, b.X, b.Y);
+                    using (var trailPen2 = new Pen(Color.FromArgb(200, 255, 210, 60), r * 0.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                        g.DrawLine(trailPen2, b.X - sign * (tailLen * 0.5f), b.Y, b.X, b.Y);
+
+                    // Ball rotation angle based on distance traveled
+                    float rotDeg = (b.DistanceTraveled * 12f) * sign;
+                    var state = g.Save();
+                    g.TranslateTransform(b.X, b.Y);
+                    g.RotateTransform(rotDeg);
+
+                    // Orange leather sphere
+                    using (var ballBrush = new LinearGradientBrush(new RectangleF(-r, -r, r * 2f, r * 2f), Color.FromArgb(255, 145, 25), Color.FromArgb(195, 65, 5), 45f))
+                        g.FillEllipse(ballBrush, -r, -r, r * 2f, r * 2f);
+
+                    // Dark outer outline
+                    using (var outlinePen = new Pen(Color.FromArgb(25, 20, 20), 2f))
+                        g.DrawEllipse(outlinePen, -r, -r, r * 2f, r * 2f);
+
+                    // Basketball black seam lines
+                    using (var seamPen = new Pen(Color.FromArgb(30, 20, 20), 1.8f))
+                    {
+                        g.DrawLine(seamPen, -r, 0, r, 0);
+                        g.DrawLine(seamPen, 0, -r, 0, r);
+                        g.DrawArc(seamPen, -r * 0.85f, -r * 0.85f, r * 1.7f, r * 1.7f, 30, 120);
+                        g.DrawArc(seamPen, -r * 0.85f, -r * 0.85f, r * 1.7f, r * 1.7f, 210, 120);
+                    }
+
+                    // Specular shine highlight
+                    using (var glint = new SolidBrush(Color.FromArgb(160, Color.White)))
+                        g.FillEllipse(glint, -r * 0.55f, -r * 0.55f, r * 0.5f, r * 0.35f);
+
+                    g.Restore(state);
+                }
                 else
                 {
                     // Standard Gunner bullet
@@ -1637,10 +1704,12 @@ namespace FightingGame
             bool isGunner = attacker.Character is Gunner;
             bool isMage = attacker.Character is Mage;
             bool isDisciple = attacker.Character is Disciple;
-            bool isRanged = isGunner || isMage || isDisciple;
+            bool isBaller = attacker.Character is Baller;
+            bool isRanged = isGunner || isMage || isDisciple || (isBaller && !special);
             Gunner? gunner = attacker.Character as Gunner;
             Mage? mage = attacker.Character as Mage;
             Disciple? disciple = attacker.Character as Disciple;
+            Baller? baller = attacker.Character as Baller;
             if (isGunner && gunner != null)
             {
                 if (gunner.IsReloading)
@@ -1660,14 +1729,19 @@ namespace FightingGame
             attacker.AttackCooldown = special ? SpecialCooldownMs : BasicCooldownMs;
             attacker.LastAttackWasSpecial = special;
 
-            float reach = isRanged ? GunnerMidRange : (special ? SpecialReach : BasicReach);
+            float reach = isRanged ? GunnerMidRange : (isBaller && special ? 360f : (special ? SpecialReach : BasicReach));
             float distDelta = defender.PosX - attacker.PosX;
             bool facingTarget = (distDelta * attacker.FacingSign) >= -30f;
             float distance = MathF.Abs(distDelta);
             bool willConnect = facingTarget && distance <= reach;
 
-            float lungeDist = isRanged ? (isGunner ? -14f : -10f) : (special ? 95f : 70f);
+            float lungeDist = isRanged ? (isGunner ? -14f : -10f) : (isBaller && special ? Math.Clamp(distDelta * 0.82f, -260f, 260f) : (special ? 95f : 70f));
             if (!isRanged && !willConnect) lungeDist *= 0.55f;
+
+            if (isBaller && special)
+            {
+                attacker.VerticalVelocity = JumpPower * 1.35f;
+            }
 
             if (special)
             {
@@ -1796,6 +1870,28 @@ namespace FightingGame
                     });
                 }
             }
+            else if (isBaller && baller != null)
+            {
+                float ballX = attacker.PosX + attacker.FacingSign * 34f;
+                float ballY = attacker.GroundY - 72f;
+
+                if (!special)
+                {
+                    // Basic: Shoot spinning basketball projectile
+                    muzzleFlashes.Add(new MuzzleFlash { X = ballX, Y = ballY, Radius = 15f });
+                    activeBullets.Add(new BulletProjectile
+                    {
+                        X = ballX,
+                        Y = ballY,
+                        VelocityX = attacker.FacingSign * 28f,
+                        MaxDistance = GunnerMidRange,
+                        IsSpecial = false,
+                        Color = Color.FromArgb(245, 115, 20),
+                        Type = ProjectileType.Basketball,
+                        Radius = 14f
+                    });
+                }
+            }
 
             await Lunge(attacker, lungeDist, special ? (isRanged ? 130 : 200) : (isRanged ? 90 : 160));
 
@@ -1822,8 +1918,13 @@ namespace FightingGame
 
                 if (special)
                 {
-                    Color boomColor = isMage ? Color.OrangeRed : (isDisciple ? Color.DarkViolet : defender.TeamColor);
+                    Color boomColor = isMage ? Color.OrangeRed : (isDisciple ? Color.DarkViolet : (isBaller ? Color.FromArgb(255, 120, 20) : defender.TeamColor));
                     _ = SpawnBoom(defender.PosX, defender.GroundY - 90f, boomColor);
+                    if (isBaller)
+                    {
+                        _ = SpawnBoom(defender.PosX + 25f, defender.GroundY - 30f, Color.Gold);
+                        _ = SpawnBoom(defender.PosX - 25f, defender.GroundY - 30f, Color.OrangeRed);
+                    }
                 }
 
                 var hits = new List<HitInfo>();
@@ -1855,6 +1956,8 @@ namespace FightingGame
                     AppendLog($"{attacker.Character.GetName()} casts fire but {defender.Character.GetName()} is out of mid-range — fireball dissipates!");
                 else if (isDisciple)
                     AppendLog($"{attacker.Character.GetName()} unleashes shadow magic but {defender.Character.GetName()} is out of mid-range — shadow dissipates!");
+                else if (isBaller)
+                    AppendLog($"{attacker.Character.GetName()} shoots the basketball but {defender.Character.GetName()} is out of range — air ball!");
                 else
                     AppendLog($"{attacker.Character.GetName()} swings but {defender.Character.GetName()} is too far away — misses!");
             }
@@ -1951,7 +2054,8 @@ namespace FightingGame
             foreach (var b in introFrames) b.Dispose();
             introFrames.Clear();
 
-            string path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "special.png");
+            string cutinPath = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "cutin.png");
+            string path = File.Exists(cutinPath) ? cutinPath : Path.Combine(AppContext.BaseDirectory, "Sprites", type, "special.png");
             if (!File.Exists(path)) path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "idle.png");
             if (!File.Exists(path)) return;
 
@@ -1960,7 +2064,9 @@ namespace FightingGame
                 using var full = Image.FromFile(path);
                 int frameCount = 1;
                 var frameMap = FrameCountsFor(type);
-                if (path.Contains("special") && frameMap.TryGetValue(AnimState.Special, out int sCount))
+                if (path == cutinPath)
+                    frameCount = 6;
+                else if (path.Contains("special") && frameMap.TryGetValue(AnimState.Special, out int sCount))
                     frameCount = Math.Max(1, sCount);
                 else if (frameMap.TryGetValue(AnimState.Idle, out int iCount))
                     frameCount = Math.Max(1, iCount);
@@ -1975,7 +2081,7 @@ namespace FightingGame
                 {
                     var bmp = new Bitmap(destW, targetHeight);
                     using var g = Graphics.FromImage(bmp);
-                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    g.InterpolationMode = path == cutinPath ? InterpolationMode.HighQualityBicubic : InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = PixelOffsetMode.Half;
                     g.DrawImage(full, new Rectangle(0, 0, destW, targetHeight), new Rectangle(i * frameW, 0, frameW, frameH), GraphicsUnit.Pixel);
                     introFrames.Add(bmp);
