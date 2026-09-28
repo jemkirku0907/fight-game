@@ -39,6 +39,7 @@ namespace FightingGame
         public float GuardProgress;    // 0 = idle, 1 = arms fully crossed in guard
         public float FlashIntensity;   // 0..1 red "just got hit" flash
         public float DisplayHp;        // animated HP value shown on the bar (tweens toward real HP)
+        public float DamageLagHp;     // delayed "ghost" damage bar that eases down after hits
 
         // Optional sprite art — null (or incomplete) means "keep using the
         // procedural stick figure below". Drop PNGs in Sprites/P1 or
@@ -56,6 +57,7 @@ namespace FightingGame
             TeamColor = teamColor;
             FacingSign = facingSign;
             DisplayHp = character.GetHP();
+            DamageLagHp = character.GetHP();
         }
 
         // Called once per tick by BattleForm with whatever state the fighter

@@ -8,7 +8,7 @@ namespace FightingGame
 {
     public static class RosterCutInGenerator
     {
-        public static void EnsureAllRosterCutIns(string? explicitSpritesDir = null)
+        public static void EnsureAllRosterCutIns(string? explicitSpritesDir = null, bool force = false)
         {
             var characters = new (string Name, string PreferredSrc, int FrameCount, int UseFrame, Color ThemeColor, Color SpeedLineColor, float EyeXRatio, float EyeYRatio)[]
             {
@@ -38,7 +38,7 @@ namespace FightingGame
 
                     string cutinPath = Path.Combine(charDir, "cutin.png");
 
-                    if (!File.Exists(cutinPath))
+                    if (force || !File.Exists(cutinPath))
                     {
                         GenerateCharCutIn(charDir, ch.Name, ch.PreferredSrc, ch.FrameCount, ch.UseFrame, ch.ThemeColor, ch.SpeedLineColor, ch.EyeXRatio, ch.EyeYRatio);
                     }
@@ -127,25 +127,42 @@ namespace FightingGame
                         int dx = ox + (cutW - dw) / 2;
                         int dy = (cutH - dh) / 2;
 
+                        // Dynamic angled speedlines (drawn BEHIND character so face remains completely clean)
+                        gCut.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        using (var linePen = new Pen(Color.FromArgb(90 + f * 15, speedLineCol), 2f))
+                        {
+                            for (int s = 0; s < 4; s++)
+                            {
+                                float sx = ox + 15f + s * 55f;
+                                gCut.DrawLine(linePen, sx, 0, sx + 25f, cutH);
+                            }
+                        }
+
+                        // Character portrait with crisp nearest-neighbor scaling
                         gCut.InterpolationMode = InterpolationMode.NearestNeighbor;
                         gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
 
-                        // Dynamic angled speedlines
-                        gCut.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                        using var linePen = new Pen(Color.FromArgb(130 + f * 20, speedLineCol), 2.5f);
-                        for (int s = 0; s < 5; s++)
+                        // Angled targeting cyber corner brackets
+                        using (var boxPen = new Pen(Color.Gold, 2.5f))
                         {
-                            float sx = ox + 18f + s * 42f;
-                            gCut.DrawLine(linePen, sx, 0, sx + 28f, cutH);
+                            float bx = ox + 15f;
+                            float by = 15f;
+                            float bw = cutW - 30f;
+                            float bh = cutH - 30f;
+                            float cLen = 18f;
+                            // Top-left
+                            gCut.DrawLine(boxPen, bx, by, bx + cLen, by);
+                            gCut.DrawLine(boxPen, bx, by, bx, by + cLen);
+                            // Top-right
+                            gCut.DrawLine(boxPen, bx + bw, by, bx + bw - cLen, by);
+                            gCut.DrawLine(boxPen, bx + bw, by, bx + bw, by + cLen);
+                            // Bottom-left
+                            gCut.DrawLine(boxPen, bx, by + bh, bx + cLen, by + bh);
+                            gCut.DrawLine(boxPen, bx, by + bh, bx, by + bh - cLen);
+                            // Bottom-right
+                            gCut.DrawLine(boxPen, bx + bw, by + bh, bx + bw - cLen, by + bh);
+                            gCut.DrawLine(boxPen, bx + bw, by + bh, bx + bw, by + bh - cLen);
                         }
-
-                        // Angled targeting bounding box (yellow bracket)
-                        using var boxPen = new Pen(Color.Gold, 2.5f);
-                        float bx = ox + 15f;
-                        float by = 15f;
-                        float bw = cutW - 30f;
-                        float bh = cutH - 30f;
-                        gCut.DrawRectangle(boxPen, bx, by, bw, bh);
 
                         // Tekken Rage Art targeting crosshair / eye flare (frames 2 to 5)
                         if (f >= 2)

@@ -55,6 +55,13 @@ namespace FightingGame
         private readonly Button btnStatus = new();
         private readonly Label lblControls = new();
         private readonly Label lblLog = new();
+        private readonly Button btnToggleLog = new();
+        private readonly Button btnCloseLog = new();
+        private readonly Button btnClearLog = new();
+        private readonly BufferedPanel pnlLogDrawer = new();
+        private readonly Label lblLogTitle = new();
+        private bool isLogOpen = false;
+        private readonly List<(string Text, Color Col, float Timer)> combatTicker = new();
 
         // ---- Result screen controls ----
         private readonly Label lblKO = new();
@@ -194,6 +201,12 @@ namespace FightingGame
                 return true;
             }
 
+            if (keyData == Keys.Tab && msg.Msg == WM_KEYDOWN && pnlBattle.Visible)
+            {
+                ToggleLogDrawer();
+                return true;
+            }
+
             if (pnlStartMenu.Visible && msg.Msg == WM_KEYDOWN)
             {
                 if (keyData == Keys.Escape)
@@ -222,6 +235,12 @@ namespace FightingGame
             if (e.KeyCode == Keys.F11)
             {
                 ToggleFullscreen();
+                return;
+            }
+
+            if (e.KeyCode == Keys.Tab && pnlBattle.Visible)
+            {
+                ToggleLogDrawer();
                 return;
             }
 
@@ -300,6 +319,15 @@ namespace FightingGame
                 var mf = muzzleFlashes[i];
                 mf.Alpha -= 0.16f;
                 if (mf.Alpha <= 0f) muzzleFlashes.RemoveAt(i);
+            }
+
+            // Update floating combat ticker toasts
+            for (int i = combatTicker.Count - 1; i >= 0; i--)
+            {
+                var item = combatTicker[i];
+                item.Timer -= (float)gameTimer.Interval / 1000f;
+                if (item.Timer <= 0f) combatTicker.RemoveAt(i);
+                else combatTicker[i] = item;
             }
 
             canvas.Invalidate();
@@ -669,6 +697,18 @@ namespace FightingGame
             g.DrawPath(pen, path);
         }
 
+        private static void DrawRoundedRect(Graphics g, Brush brush, RectangleF bounds, float radius)
+        {
+            using var path = new GraphicsPath();
+            float d = radius * 2f;
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            g.FillPath(brush, path);
+        }
+
         // =========================================================
         // Screen 1 — character select
         // =========================================================
@@ -736,11 +776,11 @@ namespace FightingGame
                 pnlCharSelect.Controls.Add(p2Tile);
             }
 
-            btnFight.Text = "FIGHT!";
+            btnFight.Text = "⚡ FIGHT! ⚡";
             btnFight.Location = new Point(startX, 570);
-            btnFight.Size = new Size(tileW * RosterNames.Length + gap * (RosterNames.Length - 1), 46);
-            btnFight.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
-            btnFight.BackColor = Color.FromArgb(230, 255, 0, 110);
+            btnFight.Size = new Size(tileW * RosterNames.Length + gap * (RosterNames.Length - 1), 48);
+            btnFight.Font = new Font("Segoe UI Black", 13f, FontStyle.Bold);
+            btnFight.BackColor = Color.FromArgb(240, 255, 30, 95);
             btnFight.ForeColor = Color.White;
             btnFight.FlatStyle = FlatStyle.Flat;
             btnFight.FlatAppearance.BorderSize = 0;
@@ -750,26 +790,38 @@ namespace FightingGame
             pnlCharSelect.Controls.Add(btnFight);
         }
 
+        private static string GetArchetype(string type) => type switch
+        {
+            "Warrior" => "TANK",
+            "Ninja" => "SPEED",
+            "Mage" => "BURST",
+            "Disciple" => "SHADOW",
+            "Gunner" => "RANGED",
+            "Baller" => "MAMA DUNK",
+            _ => "FIGHTER"
+        };
+
         private Button MakeCharTile(string type, int x, int y, int w, int h)
         {
-            string label = type == "Baller" ? "Rene" : type;
+            string label = type == "Baller" ? "RENE" : type.ToUpper();
+            string sub = $"[ {GetArchetype(type)} ]";
             var btn = new Button
             {
                 Location = new Point(x, y),
                 Size = new Size(w, h),
-                BackColor = Color.FromArgb(200, 18, 14, 32),
+                BackColor = Color.FromArgb(215, 18, 16, 30),
                 ForeColor = Color.White,
-                Text = label,
+                Text = $"{label}\n{sub}",
                 TextImageRelation = TextImageRelation.ImageAboveText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.BottomCenter,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
             };
             btn.FlatAppearance.BorderSize = 2;
-            btn.FlatAppearance.BorderColor = Color.FromArgb(140, 80, 50, 120);
+            btn.FlatAppearance.BorderColor = Color.FromArgb(120, 60, 50, 95);
 
             var portrait = LoadPortrait(type);
             if (portrait != null) btn.Image = portrait;
@@ -825,16 +877,16 @@ namespace FightingGame
             foreach (var kv in p1Tiles)
             {
                 bool selected = kv.Key == p1SelectedType;
-                kv.Value.FlatAppearance.BorderColor = selected ? Color.Cyan : Color.FromArgb(140, 80, 50, 120);
-                kv.Value.FlatAppearance.BorderSize = selected ? 4 : 2;
-                kv.Value.BackColor = selected ? Color.FromArgb(230, 25, 45, 65) : Color.FromArgb(200, 18, 14, 32);
+                kv.Value.FlatAppearance.BorderColor = selected ? Color.Cyan : Color.FromArgb(100, 50, 40, 80);
+                kv.Value.FlatAppearance.BorderSize = selected ? 3 : 2;
+                kv.Value.BackColor = selected ? Color.FromArgb(235, 15, 45, 65) : Color.FromArgb(215, 18, 16, 30);
             }
             foreach (var kv in p2Tiles)
             {
                 bool selected = kv.Key == p2SelectedType;
-                kv.Value.FlatAppearance.BorderColor = selected ? Color.HotPink : Color.FromArgb(140, 80, 50, 120);
-                kv.Value.FlatAppearance.BorderSize = selected ? 4 : 2;
-                kv.Value.BackColor = selected ? Color.FromArgb(230, 65, 25, 45) : Color.FromArgb(200, 18, 14, 32);
+                kv.Value.FlatAppearance.BorderColor = selected ? Color.HotPink : Color.FromArgb(100, 50, 40, 80);
+                kv.Value.FlatAppearance.BorderSize = selected ? 3 : 2;
+                kv.Value.BackColor = selected ? Color.FromArgb(235, 65, 18, 45) : Color.FromArgb(215, 18, 16, 30);
             }
         }
 
@@ -946,57 +998,114 @@ namespace FightingGame
         private void BuildBattlePanel()
         {
             pnlBattle.Dock = DockStyle.Fill;
-            pnlBattle.BackColor = BackColor;
+            pnlBattle.BackColor = Color.FromArgb(14, 16, 26);
 
-            canvas.Location = new Point(0, 0);
-            canvas.Size = new Size(900, 420);
-            canvas.BackColor = Color.FromArgb(30, 34, 54);
+            canvas.Dock = DockStyle.Fill;
+            canvas.BackColor = Color.FromArgb(24, 26, 42);
             canvas.Paint += Canvas_Paint;
             canvas.TabStop = true;
             pnlBattle.Controls.Add(canvas);
 
-            lblControls.Text = "P1: A/D move  W jump  F attack  G special  S block  R reload      P2: ←/→ move  ↑ jump  K attack  L special  ↓ block  P reload      [F11: Fullscreen]";
-            lblControls.Location = new Point(20, 430);
-            lblControls.AutoSize = true;
-            lblControls.ForeColor = Color.Gray;
-            lblControls.Font = new Font("Segoe UI", 9f, FontStyle.Italic);
-            pnlBattle.Controls.Add(lblControls);
+            // Sleek floating toggle button for the combat log overlay
+            btnToggleLog.Text = "📜 LOG [Tab]";
+            btnToggleLog.Size = new Size(115, 30);
+            btnToggleLog.FlatStyle = FlatStyle.Flat;
+            btnToggleLog.FlatAppearance.BorderSize = 1;
+            btnToggleLog.FlatAppearance.BorderColor = Color.FromArgb(140, 0, 210, 255);
+            btnToggleLog.BackColor = Color.FromArgb(190, 20, 24, 38);
+            btnToggleLog.ForeColor = Color.Cyan;
+            btnToggleLog.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnToggleLog.Cursor = Cursors.Hand;
+            btnToggleLog.Click += (s, e) => ToggleLogDrawer();
+            pnlBattle.Controls.Add(btnToggleLog);
 
-            btnStatus.Text = "📋  SHOW STATS";
-            btnStatus.Location = new Point(20, 460);
-            btnStatus.Size = new Size(205, 40);
+            // Collapsible sleek floating drawer for combat audit & stats
+            pnlLogDrawer.Size = new Size(480, 210);
+            pnlLogDrawer.BackColor = Color.FromArgb(235, 14, 16, 26);
+            pnlLogDrawer.Visible = false;
+            pnlLogDrawer.Paint += (s, pe) =>
+            {
+                using var p = new Pen(Color.FromArgb(160, 0, 210, 255), 1.5f);
+                pe.Graphics.DrawRectangle(p, 0, 0, pnlLogDrawer.Width - 1, pnlLogDrawer.Height - 1);
+            };
+
+            lblLogTitle.Text = "COMBAT LOG & AUDIT";
+            lblLogTitle.Font = new Font("Segoe UI Black", 9.5f, FontStyle.Bold);
+            lblLogTitle.ForeColor = Color.Gold;
+            lblLogTitle.Location = new Point(14, 10);
+            lblLogTitle.AutoSize = true;
+            pnlLogDrawer.Controls.Add(lblLogTitle);
+
+            btnStatus.Text = "📊 STATS";
+            btnStatus.Location = new Point(230, 6);
+            btnStatus.Size = new Size(95, 28);
             btnStatus.FlatStyle = FlatStyle.Flat;
-            btnStatus.FlatAppearance.BorderSize = 0;
-            btnStatus.BackColor = Color.FromArgb(65, 65, 85);
+            btnStatus.FlatAppearance.BorderSize = 1;
+            btnStatus.FlatAppearance.BorderColor = Color.DimGray;
+            btnStatus.BackColor = Color.FromArgb(45, 48, 68);
             btnStatus.ForeColor = Color.White;
-            btnStatus.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            btnStatus.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             btnStatus.Cursor = Cursors.Hand;
-            btnStatus.MouseEnter += (o, e) => btnStatus.BackColor = Color.FromArgb(90, 90, 115);
-            btnStatus.MouseLeave += (o, e) => btnStatus.BackColor = Color.FromArgb(65, 65, 85);
             btnStatus.Click += (s, e) =>
             {
                 p1Char?.DisplayStatus();
                 p2Char?.DisplayStatus();
+                canvas.Focus();
             };
-            pnlBattle.Controls.Add(btnStatus);
+            pnlLogDrawer.Controls.Add(btnStatus);
 
-            lblLog.Text = "COMBAT LOG";
-            lblLog.ForeColor = Color.Gray;
-            lblLog.AutoSize = true;
-            lblLog.Location = new Point(20, 516);
-            lblLog.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-            pnlBattle.Controls.Add(lblLog);
-            lstLog.Location = new Point(20, 536);
-            lstLog.Size = new Size(860, 120);
-            lstLog.BackColor = Color.FromArgb(12, 12, 18);
+            btnClearLog.Text = "CLEAR";
+            btnClearLog.Location = new Point(332, 6);
+            btnClearLog.Size = new Size(68, 28);
+            btnClearLog.FlatStyle = FlatStyle.Flat;
+            btnClearLog.FlatAppearance.BorderSize = 1;
+            btnClearLog.FlatAppearance.BorderColor = Color.DimGray;
+            btnClearLog.BackColor = Color.FromArgb(45, 48, 68);
+            btnClearLog.ForeColor = Color.Gainsboro;
+            btnClearLog.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            btnClearLog.Cursor = Cursors.Hand;
+            btnClearLog.Click += (s, e) =>
+            {
+                lstLog.Items.Clear();
+                canvas.Focus();
+            };
+            pnlLogDrawer.Controls.Add(btnClearLog);
+
+            btnCloseLog.Text = "✕";
+            btnCloseLog.Location = new Point(410, 6);
+            btnCloseLog.Size = new Size(55, 28);
+            btnCloseLog.FlatStyle = FlatStyle.Flat;
+            btnCloseLog.FlatAppearance.BorderSize = 0;
+            btnCloseLog.BackColor = Color.FromArgb(60, 25, 35);
+            btnCloseLog.ForeColor = Color.HotPink;
+            btnCloseLog.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            btnCloseLog.Cursor = Cursors.Hand;
+            btnCloseLog.Click += (s, e) => ToggleLogDrawer();
+            pnlLogDrawer.Controls.Add(btnCloseLog);
+
+            lstLog.Location = new Point(10, 40);
+            lstLog.Size = new Size(460, 160);
+            lstLog.BackColor = Color.FromArgb(10, 10, 16);
             lstLog.ForeColor = Color.Gainsboro;
-            lstLog.BorderStyle = BorderStyle.FixedSingle;
-            lstLog.Font = new Font("Consolas", 9f);
+            lstLog.BorderStyle = BorderStyle.None;
+            lstLog.Font = new Font("Consolas", 8.5f);
             lstLog.DrawMode = DrawMode.OwnerDrawFixed;
-            lstLog.ItemHeight = 18;
+            lstLog.ItemHeight = 17;
             lstLog.DrawItem += LstLog_DrawItem;
-            pnlBattle.Controls.Add(lblLog);
-            pnlBattle.Controls.Add(lstLog);
+            lstLog.GotFocus += (s, e) => canvas.Focus(); // prevent focus stealing!
+            pnlLogDrawer.Controls.Add(lstLog);
+
+            pnlBattle.Controls.Add(pnlLogDrawer);
+        }
+
+        private void ToggleLogDrawer()
+        {
+            isLogOpen = !isLogOpen;
+            pnlLogDrawer.Visible = isLogOpen;
+            btnToggleLog.Text = isLogOpen ? "✕ HIDE LOG" : "📜 LOG [Tab]";
+            btnToggleLog.BackColor = isLogOpen ? Color.FromArgb(220, 60, 20, 35) : Color.FromArgb(190, 20, 24, 38);
+            if (isLogOpen) pnlLogDrawer.BringToFront();
+            canvas.Focus();
         }
 
         private void LstLog_DrawItem(object? sender, DrawItemEventArgs e)
@@ -1079,6 +1188,8 @@ namespace FightingGame
             g.Restore(worldState);
 
             DrawHud(g);
+            DrawCombatTicker(g);
+            DrawControlsPill(g);
             DrawBanner(g);
             DrawScreenFlash(g);
             DrawSpecialIntro(g);
@@ -1088,86 +1199,226 @@ namespace FightingGame
         {
             if (p1View == null || p2View == null) return;
 
-            const int barW = 280, barH = 24, marginX = 24, y = 18;
+            int barW = Math.Clamp((int)(canvas.Width * 0.36f), 280, 480);
+            const int barH = 26, marginX = 24, y = 22;
             const int rageBarH = 10, rageGap = 5;
+
             DrawHealthBar(g, marginX, y, barW, barH, p1View, alignRight: false);
             DrawHealthBar(g, canvas.Width - marginX - barW, y, barW, barH, p2View, alignRight: true);
-            DrawRageBar(g, marginX, y + barH + rageGap, barW, rageBarH, p1View);
-            DrawRageBar(g, canvas.Width - marginX - barW, y + barH + rageGap, barW, rageBarH, p2View);
+            DrawRageBar(g, marginX, y + barH + rageGap, barW, rageBarH, p1View, isP1: true);
+            DrawRageBar(g, canvas.Width - marginX - barW, y + barH + rageGap, barW, rageBarH, p2View, isP1: false);
 
             if (p1View.Character is Gunner g1)
                 DrawGunnerAmmoHud(g, marginX, y + barH + rageGap + rageBarH + 6, barW, g1, alignRight: false, "R: Reload");
             if (p2View.Character is Gunner g2)
                 DrawGunnerAmmoHud(g, canvas.Width - marginX - barW, y + barH + rageGap + rageBarH + 6, barW, g2, alignRight: true, "P: Reload");
 
-            using var vsFont = new Font("Segoe UI Black", 18f, FontStyle.Bold);
+            // Center VS & Round Emblem
+            using var vsFont = new Font("Segoe UI Black", 20f, FontStyle.Bold | FontStyle.Italic);
+            using var vsShadow = new SolidBrush(Color.FromArgb(180, Color.Black));
             using var vsBrush = new SolidBrush(Color.Gold);
             var vsSize = g.MeasureString("VS", vsFont);
-            g.DrawString("VS", vsFont, vsBrush, canvas.Width / 2f - vsSize.Width / 2f, y);
+            float vsX = canvas.Width / 2f - vsSize.Width / 2f;
+            g.DrawString("VS", vsFont, vsShadow, vsX + 2f, y + 2f);
+            g.DrawString("VS", vsFont, vsBrush, vsX, y);
 
-            using var roundFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+            using var roundFont = new Font("Segoe UI Black", 9.5f, FontStyle.Bold);
             string roundText = $"ROUND {Round}";
             var rSize = g.MeasureString(roundText, roundFont);
-            g.DrawString(roundText, roundFont, Brushes.White, canvas.Width / 2f - rSize.Width / 2f, y + vsSize.Height + 2);
+            float rX = canvas.Width / 2f - rSize.Width / 2f;
+            float rY = y + vsSize.Height - 2f;
+            g.DrawString(roundText, roundFont, Brushes.WhiteSmoke, rX, rY);
+
+            // Win round indicators (arcade dots)
+            float pipY = rY + rSize.Height + 2f;
+            using var activePip = new SolidBrush(Color.Gold);
+            using var inactivePip = new SolidBrush(Color.FromArgb(140, 40, 45, 65));
+            using var pipBorder = new Pen(Color.FromArgb(180, Color.White), 1f);
+            float pipSz = 7f;
+            g.FillEllipse(activePip, canvas.Width / 2f - 12f, pipY, pipSz, pipSz);
+            g.DrawEllipse(pipBorder, canvas.Width / 2f - 12f, pipY, pipSz, pipSz);
+            g.FillEllipse(inactivePip, canvas.Width / 2f + 5f, pipY, pipSz, pipSz);
+            g.DrawEllipse(pipBorder, canvas.Width / 2f + 5f, pipY, pipSz, pipSz);
         }
 
         private static void DrawHealthBar(Graphics g, int x, int y, int w, int h, FighterView v, bool alignRight)
         {
             float maxHp = v.Character.GetMaxHP();
-            float ratio = maxHp <= 0 ? 0 : Math.Clamp(v.DisplayHp / maxHp, 0f, 1f);
+            float curRatio = maxHp <= 0 ? 0 : Math.Clamp(v.DisplayHp / maxHp, 0f, 1f);
+            float lagRatio = maxHp <= 0 ? 0 : Math.Clamp(v.DamageLagHp / maxHp, 0f, 1f);
 
-            using (var bg = new SolidBrush(Color.FromArgb(200, 25, 25, 30)))
-                g.FillRectangle(bg, x, y, w, h);
+            var barRect = new RectangleF(x, y, w, h);
 
-            Color barColor = ratio > 0.5f ? Color.LimeGreen : ratio > 0.2f ? Color.Gold : Color.Red;
-            int filledW = (int)(w * ratio);
-            using (var fill = new SolidBrush(barColor))
+            // 1. Dark chamfered background with inner shadow
+            using (var bg = new SolidBrush(Color.FromArgb(230, 16, 18, 28)))
+                g.FillRectangle(bg, barRect);
+
+            // 2. Delayed Red Damage Lag Bar (shows recent chunk lost)
+            if (lagRatio > curRatio + 0.005f)
             {
+                int lagW = (int)(w * lagRatio);
+                using var lagBrush = new SolidBrush(Color.FromArgb(235, 230, 45, 65));
                 if (!alignRight)
-                    g.FillRectangle(fill, x, y, filledW, h);
+                    g.FillRectangle(lagBrush, x, y, lagW, h);
                 else
-                    g.FillRectangle(fill, x + (w - filledW), y, filledW, h);
+                    g.FillRectangle(lagBrush, x + (w - lagW), y, lagW, h);
             }
-            using (var border = new Pen(Color.White, 2f))
+
+            // 3. Current Live HP bar with smooth color gradient
+            int curW = (int)(w * curRatio);
+            if (curW > 0)
+            {
+                Color startCol = curRatio > 0.5f ? Color.LimeGreen : curRatio > 0.25f ? Color.Gold : Color.Crimson;
+                Color endCol = curRatio > 0.5f ? Color.FromArgb(0, 220, 180) : curRatio > 0.25f ? Color.DarkOrange : Color.DarkRed;
+                var fillRect = !alignRight
+                    ? new RectangleF(x, y, curW, h)
+                    : new RectangleF(x + (w - curW), y, curW, h);
+
+                using var fillBrush = new LinearGradientBrush(fillRect, startCol, endCol, LinearGradientMode.Horizontal);
+                g.FillRectangle(fillBrush, fillRect);
+
+                // Top glossy sheen highlight
+                using var sheenBrush = new SolidBrush(Color.FromArgb(70, Color.White));
+                g.FillRectangle(sheenBrush, fillRect.X, fillRect.Y, fillRect.Width, h * 0.4f);
+            }
+
+            // 4. Outer Cyber Border (Cyan for P1, HotPink for P2)
+            Color frameCol = !alignRight ? Color.Cyan : Color.HotPink;
+            using (var border = new Pen(Color.FromArgb(200, frameCol), 2f))
                 g.DrawRectangle(border, x, y, w, h);
 
-            using var nameFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+            // 5. Player Tag & Character Name Header
             string nameText = v.Character.GetName().ToUpper();
-            var nameSize = g.MeasureString(nameText, nameFont);
-            float nameX = alignRight ? x + w - nameSize.Width : x;
-            g.DrawString(nameText, nameFont, Brushes.White, nameX, y - nameSize.Height - 2);
+            string pTag = !alignRight ? "P1" : "P2";
+            Color tagCol = !alignRight ? Color.Cyan : Color.HotPink;
 
-            string hpText = $"{Math.Max(0, (int)Math.Round(v.DisplayHp))}/{(int)maxHp}";
-            using var hpFont = new Font("Consolas", 8.5f, FontStyle.Bold);
+            using var nameFont = new Font("Segoe UI Black", 10.5f, FontStyle.Bold);
+            using var tagFont = new Font("Segoe UI Black", 8.5f, FontStyle.Bold);
+            var nameSize = g.MeasureString(nameText, nameFont);
+            var tagSize = g.MeasureString(pTag, tagFont);
+
+            float headerY = y - nameSize.Height - 3f;
+
+            if (!alignRight)
+            {
+                // P1 Tag Badge + Name
+                var tagRect = new RectangleF(x, headerY + 1f, tagSize.Width + 8f, tagSize.Height);
+                using (var tagBg = new SolidBrush(Color.FromArgb(220, tagCol)))
+                    g.FillRectangle(tagBg, tagRect);
+                using (var tagBrush = new SolidBrush(Color.FromArgb(16, 18, 28)))
+                    g.DrawString(pTag, tagFont, tagBrush, tagRect.X + 4f, tagRect.Y);
+
+                float nameX = tagRect.Right + 6f;
+                using var shadowBrush = new SolidBrush(Color.FromArgb(180, Color.Black));
+                g.DrawString(nameText, nameFont, shadowBrush, nameX + 1.5f, headerY + 1.5f);
+                g.DrawString(nameText, nameFont, Brushes.White, nameX, headerY);
+            }
+            else
+            {
+                // Name + P2 Tag Badge
+                var tagRect = new RectangleF(x + w - tagSize.Width - 8f, headerY + 1f, tagSize.Width + 8f, tagSize.Height);
+                using (var tagBg = new SolidBrush(Color.FromArgb(220, tagCol)))
+                    g.FillRectangle(tagBg, tagRect);
+                using (var tagBrush = new SolidBrush(Color.FromArgb(16, 18, 28)))
+                    g.DrawString(pTag, tagFont, tagBrush, tagRect.X + 4f, tagRect.Y);
+
+                float nameX = tagRect.Left - nameSize.Width - 6f;
+                using var shadowBrush = new SolidBrush(Color.FromArgb(180, Color.Black));
+                g.DrawString(nameText, nameFont, shadowBrush, nameX + 1.5f, headerY + 1.5f);
+                g.DrawString(nameText, nameFont, Brushes.White, nameX, headerY);
+            }
+
+            // 6. Centered HP Numbers with Drop Shadow
+            string hpText = $"{Math.Max(0, (int)Math.Round(v.DisplayHp))} / {(int)maxHp}";
+            using var hpFont = new Font("Consolas", 9f, FontStyle.Bold);
             var hpSize = g.MeasureString(hpText, hpFont);
-            g.DrawString(hpText, hpFont, Brushes.Black, x + w / 2f - hpSize.Width / 2f + 1, y + h / 2f - hpSize.Height / 2f + 1);
-            g.DrawString(hpText, hpFont, Brushes.White, x + w / 2f - hpSize.Width / 2f, y + h / 2f - hpSize.Height / 2f);
+            float hpX = x + w / 2f - hpSize.Width / 2f;
+            float hpY = y + h / 2f - hpSize.Height / 2f;
+            using var hpShadow = new SolidBrush(Color.FromArgb(210, Color.Black));
+            g.DrawString(hpText, hpFont, hpShadow, hpX + 1.2f, hpY + 1.2f);
+            g.DrawString(hpText, hpFont, Brushes.White, hpX, hpY);
         }
 
-        private static void DrawRageBar(Graphics g, int x, int y, int w, int h, FighterView v)
+        private static void DrawRageBar(Graphics g, int x, int y, int w, int h, FighterView v, bool isP1)
         {
             const float rageMax = 100f;
             float ratio = Math.Clamp(v.Rage / rageMax, 0f, 1f);
             bool full = ratio >= 0.999f;
 
-            using (var bg = new SolidBrush(Color.FromArgb(200, 25, 25, 30)))
+            using (var bg = new SolidBrush(Color.FromArgb(220, 16, 18, 28)))
                 g.FillRectangle(bg, x, y, w, h);
 
             int filledW = (int)(w * ratio);
-            Color rageColor = full ? Color.Gold : Color.MediumPurple;
-            using (var fill = new SolidBrush(rageColor))
-                g.FillRectangle(fill, x, y, filledW, h);
+            if (filledW > 0)
+            {
+                Color startRage = full ? Color.Gold : isP1 ? Color.DarkTurquoise : Color.DeepPink;
+                Color endRage = full ? Color.OrangeRed : isP1 ? Color.Cyan : Color.HotPink;
+                var rRect = !isP1
+                    ? new RectangleF(x + (w - filledW), y, filledW, h)
+                    : new RectangleF(x, y, filledW, h);
 
-            using (var border = new Pen(full ? Color.Gold : Color.White, full ? 2.5f : 1.5f))
+                using var rBrush = new LinearGradientBrush(rRect, startRage, endRage, LinearGradientMode.Horizontal);
+                g.FillRectangle(rBrush, rRect);
+            }
+
+            Color borderCol = full ? Color.Gold : Color.FromArgb(140, 120, 140, 180);
+            using (var border = new Pen(borderCol, full ? 2f : 1.2f))
                 g.DrawRectangle(border, x, y, w, h);
 
             if (full)
             {
-                using var readyFont = new Font("Segoe UI", 7.5f, FontStyle.Bold);
-                string readyText = "SPECIAL READY";
+                using var readyFont = new Font("Segoe UI Black", 7f, FontStyle.Bold);
+                string readyText = "SUPER READY";
                 var size = g.MeasureString(readyText, readyFont);
-                g.DrawString(readyText, readyFont, Brushes.Black, x + w / 2f - size.Width / 2f, y + h / 2f - size.Height / 2f);
+                using var readyBrush = new SolidBrush(Color.Black);
+                g.DrawString(readyText, readyFont, readyBrush, x + w / 2f - size.Width / 2f, y + h / 2f - size.Height / 2f);
             }
+        }
+
+        private void DrawCombatTicker(Graphics g)
+        {
+            if (combatTicker.Count == 0) return;
+            float startY = canvas.Height - 100f - (combatTicker.Count * 26f);
+            using var font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+
+            for (int i = 0; i < combatTicker.Count; i++)
+            {
+                var (text, col, timer) = combatTicker[i];
+                float alphaRatio = Math.Clamp(timer / 0.6f, 0f, 1f);
+                int alpha = (int)(alphaRatio * 230);
+                if (alpha <= 5) continue;
+
+                var sz = g.MeasureString(text, font);
+                var rect = new RectangleF(24f, startY + i * 26f, sz.Width + 18f, 22f);
+                using (var bg = new SolidBrush(Color.FromArgb((int)(alpha * 0.75f), 10, 12, 22)))
+                    DrawRoundedRect(g, bg, rect, 6f);
+                using (var border = new Pen(Color.FromArgb((int)(alpha * 0.6f), col), 1f))
+                    DrawRoundedRect(g, border, rect, 6f);
+
+                using var brush = new SolidBrush(Color.FromArgb(alpha, col));
+                g.DrawString(text, font, brush, rect.X + 9f, rect.Y + 2f);
+            }
+        }
+
+        private void DrawControlsPill(Graphics g)
+        {
+            float pillW = Math.Min(canvas.Width - 360f, 680f);
+            if (pillW < 300f) return;
+            float pillH = 24f;
+            float pillX = (canvas.Width - pillW) / 2f;
+            float pillY = canvas.Height - 32f;
+            var pillRect = new RectangleF(pillX, pillY, pillW, pillH);
+
+            using (var bg = new SolidBrush(Color.FromArgb(160, 12, 14, 24)))
+                DrawRoundedRect(g, bg, pillRect, 12f);
+            using (var border = new Pen(Color.FromArgb(70, 100, 160, 220), 1.2f))
+                DrawRoundedRect(g, border, pillRect, 12f);
+
+            string ctrlText = "P1: A/D Move • W Jump • F Attack • G Ult • S Block  |  P2: ←/→ Move • ↑ Jump • K Attack • L Ult • ↓ Block";
+            using var font = new Font("Segoe UI", 8.2f, FontStyle.Bold);
+            var sz = g.MeasureString(ctrlText, font);
+            using var brush = new SolidBrush(Color.FromArgb(200, Color.Gainsboro));
+            g.DrawString(ctrlText, font, brush, pillX + (pillW - sz.Width) / 2f, pillY + (pillH - sz.Height) / 2f);
         }
 
         private void DrawFloatingTexts(Graphics g)
@@ -1465,7 +1716,7 @@ namespace FightingGame
 
             // Flashing subtitle bar: MAXIMUM POWER / BEAT DROP CHARGING
             int subAlpha = (int)Math.Clamp(alpha * (0.6f + 0.4f * MathF.Sin(introFlashPulse * MathF.PI * 12f)), 0, 255);
-            string subText = "⚡ MAXIMUM POWER ⚡ >>> UNLEASHING ON BEAT DROP";
+            string subText = "MAXIMUM POWER // BEAT DROP ACTIVATED";
             using (var subFont = new Font("Segoe UI", 9.5f, FontStyle.Bold))
             using (var subBrush = new SolidBrush(Color.FromArgb(subAlpha, Color.White)))
             {
@@ -1759,6 +2010,26 @@ namespace FightingGame
             if (lstLog.IsDisposed) return;
             lstLog.Items.Add(message);
             lstLog.TopIndex = Math.Max(0, lstLog.Items.Count - 6);
+
+            // Determine toast color for floating feedback
+            Color tickerCol = Color.Gainsboro;
+            if (message.Contains("SPECIAL", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("METEOR", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("BLADE", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("OMNI", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("DEMONIC", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("MAMA", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("DUNK", StringComparison.OrdinalIgnoreCase))
+                tickerCol = Color.Gold;
+            else if (message.Contains("blocks", StringComparison.OrdinalIgnoreCase))
+                tickerCol = Color.DeepSkyBlue;
+            else if (message.Contains("takes", StringComparison.OrdinalIgnoreCase) || message.Contains("damage", StringComparison.OrdinalIgnoreCase))
+                tickerCol = Color.Coral;
+            else if (message.Contains("WINS", StringComparison.OrdinalIgnoreCase) || message.Contains("K.O", StringComparison.OrdinalIgnoreCase))
+                tickerCol = Color.Red;
+
+            if (combatTicker.Count >= 3) combatTicker.RemoveAt(0);
+            combatTicker.Add((message, tickerCol, 3.5f));
         }
 
         // ---- Real-time attack ----
@@ -2161,13 +2432,23 @@ namespace FightingGame
         private Task AnimateHpTo(FighterView v, int targetHp)
         {
             float start = v.DisplayHp;
+            float lagStart = v.DamageLagHp;
             float target = targetHp;
             if (MathF.Abs(start - target) < 0.5f)
             {
                 v.DisplayHp = target;
+                v.DamageLagHp = target;
                 return Task.CompletedTask;
             }
-            return Tween(300, t => v.DisplayHp = start + (target - start) * EaseOutCubic(t));
+            return Tween(500, t =>
+            {
+                v.DisplayHp = start + (target - start) * EaseOutCubic(Math.Min(1f, t * 1.5f));
+                if (t > 0.30f)
+                {
+                    float lagProgress = (t - 0.30f) / 0.70f;
+                    v.DamageLagHp = lagStart + (target - lagStart) * EaseOutCubic(lagProgress);
+                }
+            });
         }
 
         private async Task FlashScreen()
@@ -2528,17 +2809,19 @@ namespace FightingGame
             int h = pnlBattle.ClientSize.Height;
             if (w <= 0 || h <= 0) return;
 
-            int logH = Math.Clamp(h - 590, 110, 180);
-            int canvasH = Math.Max(380, h - (logH + 115));
+            btnToggleLog.Location = new Point(w - btnToggleLog.Width - 20, h - btnToggleLog.Height - 12);
+            btnToggleLog.BringToFront();
 
-            canvas.Location = new Point(0, 0);
-            canvas.Size = new Size(w, canvasH);
-
-            lblControls.Location = new Point(20, canvasH + 8);
-            btnStatus.Location = new Point(20, lblControls.Bottom + 6);
-            lblLog.Location = new Point(20, btnStatus.Bottom + 8);
-            lstLog.Location = new Point(20, lblLog.Bottom + 4);
-            lstLog.Size = new Size(w - 40, Math.Max(60, h - lstLog.Top - 15));
+            int drawerW = Math.Min(480, w - 40);
+            int drawerH = Math.Min(220, h - 80);
+            pnlLogDrawer.Size = new Size(drawerW, drawerH);
+            pnlLogDrawer.Location = new Point(w - drawerW - 20, h - drawerH - 50);
+            lstLog.Location = new Point(10, 42);
+            lstLog.Size = new Size(drawerW - 20, drawerH - 52);
+            btnCloseLog.Location = new Point(drawerW - 55, 6);
+            btnClearLog.Location = new Point(drawerW - 130, 6);
+            btnStatus.Location = new Point(drawerW - 240, 6);
+            if (isLogOpen) pnlLogDrawer.BringToFront();
 
             canvas.Invalidate();
         }

@@ -484,15 +484,17 @@ namespace FightingGame
                         int dx = ox + (fw - dw) / 2;
                         int dy = (fh - dh) / 2;
 
-                        gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
-
-                        // Gold speedlines
-                        using var linePen = new Pen(Color.FromArgb(140 + f * 20, Color.Gold), 2.5f);
-                        for (int s = 0; s < 5; s++)
+                        // Gold speedlines (drawn behind portrait so face remains clean)
+                        using (var linePen = new Pen(Color.FromArgb(90 + f * 15, Color.Gold), 2f))
                         {
-                            float sx = ox + 18f + s * 42f;
-                            gCut.DrawLine(linePen, sx, 0, sx + 28f, fh);
+                            for (int s = 0; s < 4; s++)
+                            {
+                                float sx = ox + 15f + s * 55f;
+                                gCut.DrawLine(linePen, sx, 0, sx + 25f, fh);
+                            }
                         }
+
+                        gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
 
                         // Tekken Rage Art red eye flare in later frames
                         if (f >= 2)
