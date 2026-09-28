@@ -2,14 +2,14 @@ using System;
 
 namespace FightingGame
 {
-    // High-flying basketball player Rene Clert Baterbonia with mid-range basketball projectile throws
+    // High-flying basketball player Rene with mid-range basketball projectile throws
     // and an explosive target-locked "MAMA DUNK" aerial posterizer ultimate.
     public class Baller : Character
     {
         private const int DunkHits = 3;
 
-        public Baller(string name = "Rene Clert Baterbonia")
-            : base(string.IsNullOrWhiteSpace(name) || name == "Baller" ? "Rene Clert Baterbonia" : name, maxHp: 100, attackPower: 13, defensePower: 5)
+        public Baller(string name = "Rene")
+            : base(string.IsNullOrWhiteSpace(name) || name == "Baller" || name.Contains("Baterbonia") ? "Rene" : name, maxHp: 100, attackPower: 13, defensePower: 5)
         {
         }
 

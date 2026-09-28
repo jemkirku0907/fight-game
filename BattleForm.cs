@@ -750,7 +750,7 @@ namespace FightingGame
 
         private Button MakeCharTile(string type, int x, int y, int w, int h)
         {
-            string label = type == "Baller" ? "Rene Clert\nBaterbonia" : type;
+            string label = type == "Baller" ? "Rene" : type;
             var btn = new Button
             {
                 Location = new Point(x, y),
@@ -761,7 +761,7 @@ namespace FightingGame
                 TextImageRelation = TextImageRelation.ImageAboveText,
                 ImageAlign = ContentAlignment.MiddleCenter,
                 TextAlign = ContentAlignment.BottomCenter,
-                Font = new Font("Segoe UI", type == "Baller" ? 8.5f : 10f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
@@ -847,7 +847,7 @@ namespace FightingGame
             "Mage" => new Mage(name),
             "Disciple" => new Disciple(name),
             "Gunner" => new Gunner(name),
-            "Baller" => new Baller(name == "Baller" ? "Rene Clert Baterbonia" : name),
+            "Baller" => new Baller(name == "Baller" || name.Contains("Baterbonia") ? "Rene" : name),
             _ => new Warrior(name)
         };
 
@@ -866,8 +866,8 @@ namespace FightingGame
         {
             string p1Type = p1SelectedType!;
             string p2Type = p2SelectedType!;
-            string p1Name = p1Type == "Baller" ? "Rene Clert Baterbonia" : p1Type;
-            string p2Name = p2Type == "Baller" ? "Rene Clert Baterbonia" : p2Type;
+            string p1Name = p1Type == "Baller" ? "Rene" : p1Type;
+            string p2Name = p2Type == "Baller" ? "Rene" : p2Type;
 
             p1Char = CreateCharacter(p1Type, p1Name);
             p2Char = CreateCharacter(p2Type, p2Name);

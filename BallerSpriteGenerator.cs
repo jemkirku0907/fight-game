@@ -344,54 +344,118 @@ namespace FightingGame
             g.FillRectangle(shoes, cx + 28f, cy - 5f, 5f, 5f);
         }
 
+        private static Bitmap RemoveBackground(Bitmap src)
+        {
+            int w = src.Width;
+            int h = src.Height;
+            var result = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+            bool[,] visited = new bool[w, h];
+            var q = new Queue<Point>();
+
+            bool IsBgColor(Color c)
+            {
+                if (c.A < 30) return true;
+                int maxDiff = Math.Max(Math.Abs(c.R - c.G), Math.Max(Math.Abs(c.G - c.B), Math.Abs(c.R - c.B)));
+                if (maxDiff <= 18 && c.R >= 125) return true;
+                return false;
+            }
+
+            // Seed outer borders (top, bottom, left, right)
+            for (int x = 0; x < w; x++)
+            {
+                if (IsBgColor(src.GetPixel(x, 0))) { visited[x, 0] = true; q.Enqueue(new Point(x, 0)); }
+                if (IsBgColor(src.GetPixel(x, h - 1))) { visited[x, h - 1] = true; q.Enqueue(new Point(x, h - 1)); }
+            }
+            for (int y = 0; y < h; y++)
+            {
+                if (!visited[0, y] && IsBgColor(src.GetPixel(0, y))) { visited[0, y] = true; q.Enqueue(new Point(0, y)); }
+                if (!visited[w - 1, y] && IsBgColor(src.GetPixel(w - 1, y))) { visited[w - 1, y] = true; q.Enqueue(new Point(w - 1, y)); }
+            }
+
+            // 8-directional BFS flood fill so diagonal checkerboard squares are seamlessly traversed
+            int[] dx = { 1, -1, 0, 0, 1, 1, -1, -1 };
+            int[] dy = { 0, 0, 1, -1, 1, -1, 1, -1 };
+
+            while (q.Count > 0)
+            {
+                var pt = q.Dequeue();
+                for (int i = 0; i < 8; i++)
+                {
+                    int nx = pt.X + dx[i];
+                    int ny = pt.Y + dy[i];
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[nx, ny])
+                    {
+                        if (IsBgColor(src.GetPixel(nx, ny)))
+                        {
+                            visited[nx, ny] = true;
+                            q.Enqueue(new Point(nx, ny));
+                        }
+                    }
+                }
+            }
+
+            // Copy to result, setting visited background pixels to 100% transparent
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (visited[x, y])
+                    {
+                        result.SetPixel(x, y, Color.FromArgb(0, 0, 0, 0));
+                    }
+                    else
+                    {
+                        result.SetPixel(x, y, src.GetPixel(x, y));
+                    }
+                }
+            }
+
+            return result;
+        }
+
         private static void GeneratePixelPortraitAndCutIn(string dir)
         {
             string portraitPath = Path.Combine(dir, "portrait.png");
             string cutinPath = Path.Combine(dir, "cutin.png");
             string avatarPath = Path.Combine(dir, "avatar.png");
 
-            string userUploaded = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790595746467.png";
+            string userUploaded = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790597173045.png";
+            if (!File.Exists(userUploaded))
+                userUploaded = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790595746467.png";
+
+            Bitmap? cleanAvatar = null;
             if (File.Exists(userUploaded))
             {
-                try { File.Copy(userUploaded, avatarPath, true); } catch { }
+                using var rawImg = new Bitmap(userUploaded);
+                cleanAvatar = RemoveBackground(rawImg);
+                cleanAvatar.Save(avatarPath, ImageFormat.Png);
+            }
+            else if (File.Exists(avatarPath))
+            {
+                using var rawImg = new Bitmap(avatarPath);
+                cleanAvatar = RemoveBackground(rawImg);
             }
 
-            Image? raw = null;
-            if (File.Exists(avatarPath))
-            {
-                try { raw = Image.FromFile(avatarPath); } catch { }
-            }
-            if (raw == null && File.Exists(userUploaded))
-            {
-                try { raw = Image.FromFile(userUploaded); } catch { }
-            }
-            if (raw == null) return;
+            if (cleanAvatar == null) return;
 
-            // Crop René Clert holding the Molten basketball with his #2 DAVRAA jersey
-            int srcX = (int)(raw.Width * 0.16f);
-            int srcY = (int)(raw.Height * 0.02f);
-            int srcW = (int)(raw.Width * 0.65f);
-            int srcH = (int)(raw.Height * 0.96f);
+            // Crop Rene holding the Molten basketball with his #2 DAVRAA jersey
+            int srcX = (int)(cleanAvatar.Width * 0.16f);
+            int srcY = (int)(cleanAvatar.Height * 0.02f);
+            int srcW = (int)(cleanAvatar.Width * 0.65f);
+            int srcH = (int)(cleanAvatar.Height * 0.96f);
 
             const int targetW = 130, targetH = 165;
             using (var upscaled = new Bitmap(targetW, targetH, PixelFormat.Format32bppArgb))
             {
                 using (var gBig = Graphics.FromImage(upscaled))
                 {
+                    gBig.Clear(Color.Transparent); // NO BG!
                     gBig.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     gBig.PixelOffsetMode = PixelOffsetMode.Half;
                     gBig.SmoothingMode = SmoothingMode.AntiAlias;
 
-                    // Clean dark arcade backdrop
-                    using var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, targetW, targetH), Color.FromArgb(42, 16, 26), Color.FromArgb(16, 10, 20), LinearGradientMode.Vertical);
-                    gBig.FillRectangle(bgBrush, 0, 0, targetW, targetH);
-
-                    // Draw René Clert pixel art avatar
-                    gBig.DrawImage(raw, new Rectangle(0, 0, targetW, targetH), new Rectangle(srcX, srcY, srcW, srcH), GraphicsUnit.Pixel);
-
-                    // Arcade gold border frame
-                    using var borderPen = new Pen(Color.FromArgb(245, 210, 40), 3f);
-                    gBig.DrawRectangle(borderPen, 1, 1, targetW - 2, targetH - 2);
+                    // Draw Rene directly with transparent background
+                    gBig.DrawImage(cleanAvatar, new Rectangle(0, 0, targetW, targetH), new Rectangle(srcX, srcY, srcW, srcH), GraphicsUnit.Pixel);
                 }
 
                 upscaled.Save(portraitPath, ImageFormat.Png);
@@ -403,6 +467,7 @@ namespace FightingGame
             {
                 using (var gCut = Graphics.FromImage(cutinBmp))
                 {
+                    gCut.Clear(Color.Transparent); // NO BG!
                     gCut.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     gCut.PixelOffsetMode = PixelOffsetMode.Half;
 
@@ -411,9 +476,8 @@ namespace FightingGame
                     for (int f = 0; f < count; f++)
                     {
                         int ox = f * fw;
-                        using var bgBrush = new LinearGradientBrush(new Rectangle(ox, 0, fw, fh), Color.FromArgb(32, 10, 16), Color.FromArgb(10, 6, 14), 45f);
-                        gCut.FillRectangle(bgBrush, ox, 0, fw, fh);
 
+                        // Dynamic zoom
                         float zoom = 1.0f + f * 0.10f;
                         int dw = (int)(fw * zoom);
                         int dh = (int)(fh * zoom);
@@ -422,7 +486,7 @@ namespace FightingGame
 
                         gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
 
-                        // Pixel speedlines
+                        // Gold speedlines
                         using var linePen = new Pen(Color.FromArgb(140 + f * 20, Color.Gold), 2.5f);
                         for (int s = 0; s < 5; s++)
                         {
@@ -442,15 +506,12 @@ namespace FightingGame
                             gCut.FillRectangle(eyeGleam, eyeX - 2.5f, eyeY - flareSize, 5f, flareSize * 2f);
                             gCut.FillRectangle(eyeCore, eyeX - 2.5f, eyeY - 2.5f, 5f, 5f);
                         }
-
-                        using var borderPen = new Pen(Color.FromArgb(220, Color.OrangeRed), 3f);
-                        gCut.DrawRectangle(borderPen, ox + 1, 1, fw - 2, fh - 2);
                     }
                 }
 
                 cutinBmp.Save(cutinPath, ImageFormat.Png);
             }
-            raw.Dispose();
+            cleanAvatar.Dispose();
         }
     }
 }
