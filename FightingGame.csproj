@@ -15,8 +15,9 @@
     <None Include="Sprites\**\*.jpg" CopyToOutputDirectory="PreserveNewest" />
     <None Include="*.jpg" CopyToOutputDirectory="PreserveNewest" />
     <!-- Combat sound effects — basic_*.wav are generated placeholders; drop your own
-         Special sfx into Sounds/Special/<CharacterName>.wav (e.g. Warrior.wav). -->
+         Special sfx into Sounds/Special/<CharacterName>.wav (e.g. Warrior.wav) or .mp3. -->
     <None Include="Sounds\**\*.wav" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Sounds\**\*.mp3" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

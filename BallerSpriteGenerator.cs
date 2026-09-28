@@ -45,6 +45,7 @@ namespace FightingGame
                 }
 
                 // Ensure sound file
+                string ultVoiceSource = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\uploaded_media_1790596330393.mp3";
                 string[] soundDirs = new[]
                 {
                     Path.Combine(baseDir, "Sounds", "Special"),
@@ -54,13 +55,10 @@ namespace FightingGame
                 foreach (var sDir in soundDirs)
                 {
                     Directory.CreateDirectory(sDir);
-                    string targetWav = Path.Combine(sDir, "Baller.wav");
-                    if (!File.Exists(targetWav))
+                    string targetMp3 = Path.Combine(sDir, "Baller.mp3");
+                    if (File.Exists(ultVoiceSource))
                     {
-                        string gunnerWav = Path.Combine(sDir, "Gunner.wav");
-                        string mageWav = Path.Combine(sDir, "Mage.wav");
-                        if (File.Exists(gunnerWav)) File.Copy(gunnerWav, targetWav, true);
-                        else if (File.Exists(mageWav)) File.Copy(mageWav, targetWav, true);
+                        try { File.Copy(ultVoiceSource, targetMp3, true); } catch { }
                     }
                 }
             }

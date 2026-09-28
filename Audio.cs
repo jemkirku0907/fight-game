@@ -55,17 +55,50 @@ namespace FightingGame
 
         public static void PlayBasicBlock() => SafePlay(blockPlayer);
 
+        [System.Runtime.InteropServices.DllImport("winmm.dll")]
+        private static extern int mciSendString(string command, System.Text.StringBuilder? buffer, int bufferSize, IntPtr hwndCallback);
+
         // Special sfx are per-character, dropped in by the user as
-        // Sounds/Special/<RosterName>.wav (e.g. Sounds/Special/Warrior.wav).
+        // Sounds/Special/<RosterName>.wav or .mp3 (e.g. Sounds/Special/Baller.mp3).
         // Loaded fresh each time since these may be added/changed after the app starts.
         public static void PlaySpecial(string characterType)
         {
             try
             {
-                string path = Path.Combine(SoundsDir, "Special", $"{characterType}.wav");
-                if (!File.Exists(path)) return;
-                using var player = new SoundPlayer(path);
-                player.Play();
+                string[] extensions = { ".mp3", ".wav", ".wma" };
+                string? foundPath = null;
+
+                string[] candidateNames = characterType == "Baller"
+                    ? new[] { "Baller", "Rene", "Rene Clert", "Rene Clert Baterbonia" }
+                    : new[] { characterType };
+
+                foreach (var name in candidateNames)
+                {
+                    foreach (var ext in extensions)
+                    {
+                        string p = Path.Combine(SoundsDir, "Special", $"{name}{ext}");
+                        if (File.Exists(p))
+                        {
+                            foundPath = p;
+                            break;
+                        }
+                    }
+                    if (foundPath != null) break;
+                }
+
+                if (foundPath == null) return;
+
+                if (foundPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var player = new SoundPlayer(foundPath);
+                    player.Play();
+                }
+                else
+                {
+                    mciSendString("close specialAudio", null, 0, IntPtr.Zero);
+                    mciSendString($"open \"{foundPath}\" type mpegvideo alias specialAudio", null, 0, IntPtr.Zero);
+                    mciSendString("play specialAudio from 0", null, 0, IntPtr.Zero);
+                }
             }
             catch
             {
