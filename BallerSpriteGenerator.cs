@@ -350,93 +350,53 @@ namespace FightingGame
         {
             string portraitPath = Path.Combine(dir, "portrait.png");
             string cutinPath = Path.Combine(dir, "cutin.png");
+            string avatarPath = Path.Combine(dir, "avatar.png");
 
-            string sourceImgPath = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790575599861.png";
-            Image? raw = null;
-            if (File.Exists(sourceImgPath))
+            string userUploaded = @"C:\Users\jemki\.gemini\antigravity\brain\a2193f6a-f001-4c9d-853d-40f287a06cd6\.user_uploaded\media_1790595746467.png";
+            if (File.Exists(userUploaded))
             {
-                try { raw = Image.FromFile(sourceImgPath); } catch { }
+                try { File.Copy(userUploaded, avatarPath, true); } catch { }
             }
-            if (raw == null && File.Exists(portraitPath))
+
+            Image? raw = null;
+            if (File.Exists(avatarPath))
             {
-                try { raw = Image.FromFile(portraitPath); } catch { }
+                try { raw = Image.FromFile(avatarPath); } catch { }
+            }
+            if (raw == null && File.Exists(userUploaded))
+            {
+                try { raw = Image.FromFile(userUploaded); } catch { }
             }
             if (raw == null) return;
 
-            // Low-res pixel grid: 44 x 56 pixels (Authentic Street Fighter / Neo-Geo portrait resolution)
-            const int pw = 44, ph = 56;
-            using (var pixelGrid = new Bitmap(pw, ph, PixelFormat.Format32bppArgb))
+            // Crop René Clert holding the Molten basketball with his #2 DAVRAA jersey
+            int srcX = (int)(raw.Width * 0.16f);
+            int srcY = (int)(raw.Height * 0.02f);
+            int srcW = (int)(raw.Width * 0.65f);
+            int srcH = (int)(raw.Height * 0.96f);
+
+            const int targetW = 130, targetH = 165;
+            using (var upscaled = new Bitmap(targetW, targetH, PixelFormat.Format32bppArgb))
             {
-                using (var gSmall = Graphics.FromImage(pixelGrid))
+                using (var gBig = Graphics.FromImage(upscaled))
                 {
-                    gSmall.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    if (raw.Width > 300)
-                    {
-                        int srcX = (int)(raw.Width * 0.15f);
-                        int srcY = (int)(raw.Height * 0.08f);
-                        int srcW = (int)(raw.Width * 0.70f);
-                        int srcH = (int)(raw.Height * 0.65f);
-                        gSmall.DrawImage(raw, new Rectangle(0, 0, pw, ph), new Rectangle(srcX, srcY, srcW, srcH), GraphicsUnit.Pixel);
-                    }
-                    else
-                    {
-                        gSmall.DrawImage(raw, new Rectangle(0, 0, pw, ph), new Rectangle(0, 0, raw.Width, raw.Height), GraphicsUnit.Pixel);
-                    }
-                }
-                raw.Dispose();
+                    gBig.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    gBig.PixelOffsetMode = PixelOffsetMode.Half;
+                    gBig.SmoothingMode = SmoothingMode.AntiAlias;
 
-                // Quantize into 16-bit arcade palette
-                for (int y = 0; y < ph; y++)
-                {
-                    for (int x = 0; x < pw; x++)
-                    {
-                        var col = pixelGrid.GetPixel(x, y);
-                        if (col.A < 20) continue;
+                    // Clean dark arcade backdrop
+                    using var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, targetW, targetH), Color.FromArgb(42, 16, 26), Color.FromArgb(16, 10, 20), LinearGradientMode.Vertical);
+                    gBig.FillRectangle(bgBrush, 0, 0, targetW, targetH);
 
-                        int r = Math.Clamp((col.R / 32) * 32 + 16, 0, 255);
-                        int g = Math.Clamp((col.G / 32) * 32 + 16, 0, 255);
-                        int b = Math.Clamp((col.B / 32) * 32 + 16, 0, 255);
+                    // Draw René Clert pixel art avatar
+                    gBig.DrawImage(raw, new Rectangle(0, 0, targetW, targetH), new Rectangle(srcX, srcY, srcW, srcH), GraphicsUnit.Pixel);
 
-                        if (r > 130 && g < 75 && b < 75)
-                        {
-                            r = 220; g = 30; b = 30; // Vibrant arcade red jersey
-                        }
-                        else if (r > 170 && g > 130 && b < 60)
-                        {
-                            r = 245; g = 190; b = 25; // Gold jersey trim / numbers
-                        }
-                        else if (r > 180 && g > 90 && b < 50)
-                        {
-                            r = 245; g = 115; b = 20; // Basketball orange
-                        }
-
-                        pixelGrid.SetPixel(x, y, Color.FromArgb(col.A, r, g, b));
-                    }
+                    // Arcade gold border frame
+                    using var borderPen = new Pen(Color.FromArgb(245, 210, 40), 3f);
+                    gBig.DrawRectangle(borderPen, 1, 1, targetW - 2, targetH - 2);
                 }
 
-                // Upscale with NearestNeighbor to crisp retro arcade portrait (132 x 168)
-                const int targetW = 132, targetH = 168;
-                using (var upscaled = new Bitmap(targetW, targetH, PixelFormat.Format32bppArgb))
-                {
-                    using (var gBig = Graphics.FromImage(upscaled))
-                    {
-                        gBig.InterpolationMode = InterpolationMode.NearestNeighbor;
-                        gBig.PixelOffsetMode = PixelOffsetMode.Half;
-                        gBig.SmoothingMode = SmoothingMode.None;
-
-                        // Deep arcade dark background behind player
-                        using var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, targetW, targetH), Color.FromArgb(40, 12, 22), Color.FromArgb(14, 8, 18), LinearGradientMode.Vertical);
-                        gBig.FillRectangle(bgBrush, 0, 0, targetW, targetH);
-
-                        gBig.DrawImage(pixelGrid, new Rectangle(0, 0, targetW, targetH), new Rectangle(0, 0, pw, ph), GraphicsUnit.Pixel);
-
-                        // Arcade gold border
-                        using var borderPen = new Pen(Color.FromArgb(245, 210, 40), 3f);
-                        gBig.DrawRectangle(borderPen, 1, 1, targetW - 2, targetH - 2);
-                    }
-
-                    upscaled.Save(portraitPath, ImageFormat.Png);
-                }
+                upscaled.Save(portraitPath, ImageFormat.Png);
             }
 
             // Create pixel cutin strip for 3-second super intro
@@ -445,9 +405,8 @@ namespace FightingGame
             {
                 using (var gCut = Graphics.FromImage(cutinBmp))
                 {
-                    gCut.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    gCut.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     gCut.PixelOffsetMode = PixelOffsetMode.Half;
-                    gCut.SmoothingMode = SmoothingMode.None;
 
                     using var portImg = Image.FromFile(portraitPath);
 
@@ -457,7 +416,7 @@ namespace FightingGame
                         using var bgBrush = new LinearGradientBrush(new Rectangle(ox, 0, fw, fh), Color.FromArgb(32, 10, 16), Color.FromArgb(10, 6, 14), 45f);
                         gCut.FillRectangle(bgBrush, ox, 0, fw, fh);
 
-                        float zoom = 1.0f + f * 0.08f;
+                        float zoom = 1.0f + f * 0.10f;
                         int dw = (int)(fw * zoom);
                         int dh = (int)(fh * zoom);
                         int dx = ox + (fw - dw) / 2;
@@ -466,33 +425,34 @@ namespace FightingGame
                         gCut.DrawImage(portImg, new Rectangle(dx, dy, dw, dh));
 
                         // Pixel speedlines
-                        using var linePen = new Pen(Color.FromArgb(140 + f * 20, Color.Gold), 3f);
+                        using var linePen = new Pen(Color.FromArgb(140 + f * 20, Color.Gold), 2.5f);
                         for (int s = 0; s < 5; s++)
                         {
-                            float sx = ox + 15f + s * 42f;
-                            gCut.DrawLine(linePen, sx, 0, sx + 30f, fh);
+                            float sx = ox + 18f + s * 42f;
+                            gCut.DrawLine(linePen, sx, 0, sx + 28f, fh);
                         }
 
                         // Tekken Rage Art red eye flare in later frames
                         if (f >= 2)
                         {
-                            float eyeX = ox + fw * 0.44f;
-                            float eyeY = fh * 0.30f - (f * 1.5f);
-                            float flareSize = 6f + (f - 2) * 5f;
-                            using var eyeGleam = new SolidBrush(Color.FromArgb(230, Color.OrangeRed));
+                            float eyeX = ox + fw * 0.55f;
+                            float eyeY = fh * 0.28f - (f * 1.8f);
+                            float flareSize = 5f + (f - 2) * 5.5f;
+                            using var eyeGleam = new SolidBrush(Color.FromArgb(240, Color.OrangeRed));
                             using var eyeCore = new SolidBrush(Color.White);
-                            gCut.FillRectangle(eyeGleam, eyeX - flareSize, eyeY - 2f, flareSize * 2f, 4f);
-                            gCut.FillRectangle(eyeGleam, eyeX - 2f, eyeY - flareSize, 4f, flareSize * 2f);
-                            gCut.FillRectangle(eyeCore, eyeX - 2f, eyeY - 2f, 4f, 4f);
+                            gCut.FillRectangle(eyeGleam, eyeX - flareSize, eyeY - 2.5f, flareSize * 2f, 5f);
+                            gCut.FillRectangle(eyeGleam, eyeX - 2.5f, eyeY - flareSize, 5f, flareSize * 2f);
+                            gCut.FillRectangle(eyeCore, eyeX - 2.5f, eyeY - 2.5f, 5f, 5f);
                         }
 
-                        using var borderPen = new Pen(Color.FromArgb(200, Color.OrangeRed), 3f);
+                        using var borderPen = new Pen(Color.FromArgb(220, Color.OrangeRed), 3f);
                         gCut.DrawRectangle(borderPen, ox + 1, 1, fw - 2, fh - 2);
                     }
                 }
 
                 cutinBmp.Save(cutinPath, ImageFormat.Png);
             }
+            raw.Dispose();
         }
     }
 }
