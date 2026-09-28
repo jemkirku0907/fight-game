@@ -124,6 +124,8 @@ namespace FightingGame
         public BattleForm()
         {
             BallerSpriteGenerator.EnsureSprites();
+            RosterCutInGenerator.EnsureAllRosterCutIns(Path.Combine(AppContext.BaseDirectory, "Sprites"));
+            SpecialAudioGenerator.EnsureSounds(Path.Combine(AppContext.BaseDirectory, "Sounds"));
 
             Text = "Simple Fighting Game";
             ClientSize = new Size(1200, 800);
@@ -1063,8 +1065,10 @@ namespace FightingGame
             using (var groundPen = new Pen(Color.FromArgb(90, 255, 255, 255), 2f))
                 g.DrawLine(groundPen, 0, groundY, canvas.Width, groundY);
 
+            DrawChargingFighterEffectsFloor(g);
             p1View?.Draw(g);
             p2View?.Draw(g);
+            DrawChargingFighterEffectsAura(g);
 
             DrawBullets(g);
             DrawFloatingTexts(g);
@@ -1245,6 +1249,66 @@ namespace FightingGame
             }
         }
 
+        private void DrawChargingFighterEffectsFloor(Graphics g)
+        {
+            if (introAttacker == null || introCardAlpha <= 0.01f) return;
+
+            float fx = introAttacker.PosX;
+            float fy = introAttacker.GroundY;
+            float pulse = introFlashPulse;
+            float a = introCardAlpha;
+
+            // Expanding magical energy rings on the floor beneath feet
+            for (int r = 0; r < 4; r++)
+            {
+                float ringProgress = (pulse * 2.8f + r * 0.25f) % 1f;
+                float rw = 50f + ringProgress * 160f;
+                float rh = rw * 0.35f;
+                int rAlpha = (int)(a * 190f * (1f - ringProgress));
+                Color col = r % 2 == 0 ? introAttacker.TeamColor : Color.Gold;
+                using var ringPen = new Pen(Color.FromArgb(rAlpha, col), 2.5f);
+                g.DrawEllipse(ringPen, fx - rw / 2f, fy - rh / 2f, rw, rh);
+            }
+        }
+
+        private void DrawChargingFighterEffectsAura(Graphics g)
+        {
+            if (introAttacker == null || introCardAlpha <= 0.01f) return;
+
+            float fx = introAttacker.PosX;
+            float fy = introAttacker.GroundY;
+            float pulse = introFlashPulse;
+            float a = introCardAlpha;
+
+            // Rising aura wisps / energy particles swirling up
+            int particleCount = 18;
+            for (int p = 0; p < particleCount; p++)
+            {
+                float pProg = (pulse * 3.8f + p * (1f / particleCount)) % 1f;
+                float angle = p * (MathF.PI * 2f / particleCount) + pulse * 5f;
+                float px = fx + MathF.Cos(angle) * (26f + pProg * 32f);
+                float py = fy - pProg * 160f;
+                float pSize = 7f + 9f * (1f - pProg);
+                int pAlpha = (int)(a * 220f * (1f - pProg));
+
+                Color auraCol = p % 2 == 0 ? introAttacker.TeamColor : (p % 3 == 0 ? Color.Cyan : Color.Gold);
+                using var pBrush = new SolidBrush(Color.FromArgb(pAlpha, auraCol));
+                g.FillEllipse(pBrush, px - pSize / 2f, py - pSize / 2f, pSize, pSize);
+            }
+
+            // Crackling lightning bolts
+            using var sparkPen = new Pen(Color.FromArgb((int)(a * 240), Color.White), 2f);
+            var rnd = new Random((int)(pulse * 350));
+            for (int s = 0; s < 6; s++)
+            {
+                float sx1 = fx + rnd.Next(-32, 33);
+                float sy1 = fy - rnd.Next(15, 125);
+                float sx2 = sx1 + rnd.Next(-20, 21);
+                float sy2 = sy1 - rnd.Next(12, 35);
+                g.DrawLine(sparkPen, sx1, sy1, sx2, sy2);
+            }
+        }
+
         // Arcade-style super intro: dim the arena, pop up a portrait card
         // (real sprite art if loaded, a team-color placeholder if not) with
         // a strobing glow ring, and show the move's name underneath.
@@ -1292,7 +1356,7 @@ namespace FightingGame
                 g.FillPolygon(bannerBg, bannerPts);
             }
 
-            using (var topNeonPen = new Pen(Color.FromArgb(bannerAlpha, introAttacker.TeamColor), 4f))
+            using (var topNeonPen = new Pen(Color.FromArgb(bannerAlpha, Color.FromArgb(0, 210, 255)), 4f))
                 g.DrawLine(topNeonPen, bannerPts[0], bannerPts[1]);
             using (var botNeonPen = new Pen(Color.FromArgb(bannerAlpha, Color.Gold), 3f))
                 g.DrawLine(botNeonPen, bannerPts[3], bannerPts[2]);
@@ -1379,7 +1443,7 @@ namespace FightingGame
             // Header line: Character name & awakening
             string charTag = $"★ {introAttacker.Character.GetName().ToUpper()} // RAGE ART ACTIVATED ★";
             using (var tagFont = new Font("Segoe UI Black", 12f, FontStyle.Bold))
-            using (var tagBrush = new SolidBrush(Color.FromArgb(alpha, introAttacker.TeamColor)))
+            using (var tagBrush = new SolidBrush(Color.FromArgb(alpha, Color.FromArgb(0, 210, 255))))
             {
                 g.DrawString(charTag, tagFont, tagBrush, textStartX, textY);
             }
@@ -1853,20 +1917,20 @@ namespace FightingGame
                         Radius = 13f
                     });
                 }
-                else
+                if (!special)
                 {
-                    // Ultimate: Demonic Shadow Slam / Spectral Surge
-                    muzzleFlashes.Add(new MuzzleFlash { X = castX, Y = castY, Radius = 26f });
+                    // Basic: Demonic Shadow Orb
+                    muzzleFlashes.Add(new MuzzleFlash { X = castX, Y = castY, Radius = 16f });
                     activeBullets.Add(new BulletProjectile
                     {
                         X = castX,
                         Y = castY,
-                        VelocityX = attacker.FacingSign * 22f,
+                        VelocityX = attacker.FacingSign * 26f,
                         MaxDistance = GunnerMidRange,
-                        IsSpecial = true,
-                        Color = Color.DarkViolet,
-                        Type = ProjectileType.DemonicWave,
-                        Radius = 26f
+                        IsSpecial = false,
+                        Color = Color.MediumPurple,
+                        Type = ProjectileType.ShadowOrb,
+                        Radius = 13f
                     });
                 }
             }
@@ -1920,6 +1984,42 @@ namespace FightingGame
                 attacker.JumpHeight = 0f;
                 willConnect = true;
             }
+            else if (isDisciple && special)
+            {
+                // Target lock & auto-aim toward enemy
+                float currentDelta = defender.PosX - attacker.PosX;
+                if (MathF.Abs(currentDelta) > 1f)
+                    attacker.FacingSign = MathF.Sign(currentDelta);
+
+                AppendLog($"🔮 [DEMONIC SURGE] {attacker.Character.GetName()} unleashes an inescapable shadow sphere toward {defender.Character.GetName()}!");
+
+                float castX = attacker.PosX + attacker.FacingSign * 34f;
+                float castY = attacker.GroundY - 74f;
+                muzzleFlashes.Add(new MuzzleFlash { X = castX, Y = castY, Radius = 35f });
+
+                var demonProj = new BulletProjectile
+                {
+                    X = castX,
+                    Y = castY,
+                    VelocityX = attacker.FacingSign * 34f,
+                    MaxDistance = 1400f,
+                    IsSpecial = true,
+                    Color = Color.DarkViolet,
+                    Type = ProjectileType.DemonicWave,
+                    Radius = 32f
+                };
+                activeBullets.Add(demonProj);
+
+                // Projectile flies to target
+                float distToTarget = MathF.Abs(defender.PosX - castX);
+                int travelMs = Math.Clamp((int)(distToTarget / 1.15f), 100, 280);
+
+                await Task.Delay(travelMs);
+                activeBullets.Remove(demonProj);
+
+                // Hits and EXPLODES right on the enemy!
+                willConnect = true;
+            }
             else
             {
                 await Lunge(attacker, lungeDist, special ? (isRanged ? 130 : 200) : (isRanged ? 90 : 160));
@@ -1950,7 +2050,18 @@ namespace FightingGame
                 {
                     Color boomColor = isMage ? Color.OrangeRed : (isDisciple ? Color.DarkViolet : (isBaller ? Color.FromArgb(255, 120, 20) : defender.TeamColor));
                     _ = SpawnBoom(defender.PosX, defender.GroundY - 90f, boomColor);
-                    if (isBaller)
+                    if (isDisciple)
+                    {
+                        AppendLog($"💥 [DEMONIC DETONATION] The demonic shadow sphere explodes with catastrophic force upon {defender.Character.GetName()}!");
+                        _ = SpawnFloatingText(defender, "💥 DEMONIC DETONATION! 💥", Color.DarkViolet, 20f);
+                        _ = SpawnBoom(defender.PosX, defender.GroundY - 90f, Color.DarkViolet);
+                        _ = SpawnBoom(defender.PosX + 38f, defender.GroundY - 70f, Color.MediumPurple);
+                        _ = SpawnBoom(defender.PosX - 38f, defender.GroundY - 70f, Color.Crimson);
+                        _ = SpawnBoom(defender.PosX, defender.GroundY - 140f, Color.DarkViolet);
+                        _ = SpawnBoom(defender.PosX + 22f, defender.GroundY - 110f, Color.Magenta);
+                        _ = SpawnBoom(defender.PosX - 22f, defender.GroundY - 110f, Color.White);
+                    }
+                    else if (isBaller)
                     {
                         _ = SpawnFloatingText(defender, "💥 TARGET LOCKED! POSTER DUNK! 💥", Color.Gold, 18f);
                         _ = SpawnBoom(defender.PosX + 25f, defender.GroundY - 30f, Color.Gold);

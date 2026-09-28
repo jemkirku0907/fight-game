@@ -11,6 +11,8 @@ namespace FightingGame
             if (args.Length > 0 && args[0] == "--ensure-sprites")
             {
                 BallerSpriteGenerator.EnsureSprites();
+                RosterCutInGenerator.EnsureAllRosterCutIns(System.IO.Path.Combine(AppContext.BaseDirectory, "Sprites"));
+                SpecialAudioGenerator.EnsureSounds(System.IO.Path.Combine(AppContext.BaseDirectory, "Sounds"));
                 return;
             }
 
