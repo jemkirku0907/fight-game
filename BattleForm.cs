@@ -102,10 +102,34 @@ namespace FightingGame
         private readonly List<Bitmap> introFrames = new();
 
         // ---- Hit-stop + camera punch-in (impact juice for sound sync) ----
-        private float zoomPunch = 0f;   // 0 = no zoom, 1 = max punch-in
+        private float zoomPunch = 0f;
         private PointF zoomCenter;
 
-        private const float GroundYRatio = 0.72f;
+        // ---- Street Fighter IV Stage / Map Selection ----
+        public sealed record StageInfo(string Name, string FileName, float GroundYRatio);
+
+        private static readonly StageInfo[] AvailableStages = new[]
+        {
+            new StageInfo("CHINATOWN MARKET", "chinatown.png", 0.78f),
+            new StageInfo("URBAN ROOFTOP", "rooftop.png", 0.77f),
+            new StageInfo("CAPCOM STADIUM", "stadium.jpg", 0.74f)
+        };
+
+        private int selectedStageIndex = 0;
+        private Bitmap? currentStageImage;
+        private Bitmap? p1HudPortrait;
+        private Bitmap? p2HudPortrait;
+        private float roundTimer = 99f;
+        private int p1RoundsWon = 0;
+        private int p2RoundsWon = 0;
+        private float GroundYRatio => AvailableStages[selectedStageIndex].GroundYRatio;
+
+        // Stage select UI controls in character selection
+        private readonly Panel pnlStageBox = new();
+        private readonly Button btnPrevStage = new();
+        private readonly Button btnNextStage = new();
+        private readonly Label lblStageName = new();
+        private readonly PictureBox picStageThumb = new();
 
         // ---- Real-time movement / jump ----
         private readonly HashSet<Keys> pressedKeys = new();
@@ -290,6 +314,16 @@ namespace FightingGame
             }
 
             if (!pnlBattle.Visible || p1View == null || p2View == null) return;
+
+            if (!gameOver && introAttacker == null)
+            {
+                roundTimer -= (float)gameTimer.Interval / 1000f;
+                if (roundTimer <= 0f)
+                {
+                    roundTimer = 0f;
+                    _ = HandleTimeOver();
+                }
+            }
 
             UpdateMovement(p1View, P1Left, P1Right, P1Jump);
             UpdateMovement(p2View, P2Left, P2Right, P2Jump);
@@ -776,6 +810,9 @@ namespace FightingGame
                 pnlCharSelect.Controls.Add(p2Tile);
             }
 
+            BuildStageSelectWidget();
+            pnlCharSelect.Controls.Add(pnlStageBox);
+
             btnFight.Text = "⚡ FIGHT! ⚡";
             btnFight.Location = new Point(startX, 570);
             btnFight.Size = new Size(tileW * RosterNames.Length + gap * (RosterNames.Length - 1), 48);
@@ -788,6 +825,85 @@ namespace FightingGame
             btnFight.Enabled = false;
             btnFight.Click += BtnFight_Click;
             pnlCharSelect.Controls.Add(btnFight);
+        }
+
+        private void BuildStageSelectWidget()
+        {
+            pnlStageBox.Size = new Size(480, 60);
+            pnlStageBox.BackColor = Color.FromArgb(220, 20, 18, 30);
+            pnlStageBox.Paint += (s, e) =>
+            {
+                using var p = new Pen(Color.FromArgb(180, Color.Gold), 1.5f);
+                e.Graphics.DrawRectangle(p, 0, 0, pnlStageBox.Width - 1, pnlStageBox.Height - 1);
+            };
+
+            btnPrevStage.Text = "◀";
+            btnPrevStage.Size = new Size(38, 44);
+            btnPrevStage.Location = new Point(8, 8);
+            btnPrevStage.FlatStyle = FlatStyle.Flat;
+            btnPrevStage.FlatAppearance.BorderSize = 1;
+            btnPrevStage.FlatAppearance.BorderColor = Color.Gold;
+            btnPrevStage.BackColor = Color.FromArgb(36, 32, 52);
+            btnPrevStage.ForeColor = Color.Gold;
+            btnPrevStage.Font = new Font("Segoe UI Black", 12f, FontStyle.Bold);
+            btnPrevStage.Cursor = Cursors.Hand;
+            btnPrevStage.Click += (s, e) =>
+            {
+                selectedStageIndex = (selectedStageIndex - 1 + AvailableStages.Length) % AvailableStages.Length;
+                UpdateStageDisplay();
+            };
+
+            picStageThumb.Size = new Size(95, 44);
+            picStageThumb.Location = new Point(52, 8);
+            picStageThumb.SizeMode = PictureBoxSizeMode.Zoom;
+            picStageThumb.BorderStyle = BorderStyle.FixedSingle;
+            picStageThumb.BackColor = Color.Black;
+
+            lblStageName.AutoSize = false;
+            lblStageName.Size = new Size(276, 44);
+            lblStageName.Location = new Point(152, 8);
+            lblStageName.TextAlign = ContentAlignment.MiddleCenter;
+            lblStageName.Font = new Font("Segoe UI Black", 10.5f, FontStyle.Bold);
+            lblStageName.ForeColor = Color.Gold;
+
+            btnNextStage.Text = "▶";
+            btnNextStage.Size = new Size(38, 44);
+            btnNextStage.Location = new Point(434, 8);
+            btnNextStage.FlatStyle = FlatStyle.Flat;
+            btnNextStage.FlatAppearance.BorderSize = 1;
+            btnNextStage.FlatAppearance.BorderColor = Color.Gold;
+            btnNextStage.BackColor = Color.FromArgb(36, 32, 52);
+            btnNextStage.ForeColor = Color.Gold;
+            btnNextStage.Font = new Font("Segoe UI Black", 12f, FontStyle.Bold);
+            btnNextStage.Cursor = Cursors.Hand;
+            btnNextStage.Click += (s, e) =>
+            {
+                selectedStageIndex = (selectedStageIndex + 1) % AvailableStages.Length;
+                UpdateStageDisplay();
+            };
+
+            pnlStageBox.Controls.Add(btnPrevStage);
+            pnlStageBox.Controls.Add(picStageThumb);
+            pnlStageBox.Controls.Add(lblStageName);
+            pnlStageBox.Controls.Add(btnNextStage);
+
+            UpdateStageDisplay();
+        }
+
+        private void UpdateStageDisplay()
+        {
+            var stage = AvailableStages[selectedStageIndex];
+            lblStageName.Text = $"STAGE: {stage.Name}";
+            string path = Path.Combine(AppContext.BaseDirectory, "Sprites", "Stages", stage.FileName);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    picStageThumb.Image?.Dispose();
+                    picStageThumb.Image = Image.FromFile(path);
+                }
+                catch { }
+            }
         }
 
         private Button MakeCharTile(string type, int x, int y, int w, int h)
@@ -818,8 +934,9 @@ namespace FightingGame
         }
 
         // Loads dedicated portrait.png for Baller (Rene), otherwise loads full normal form from idle.png
-        private static Bitmap? LoadPortrait(string type, int targetHeight = 110)
+        private static Bitmap? LoadPortrait(string type, int targetHeight = 110, bool flipX = false)
         {
+            Bitmap? bmp = null;
             if (type == "Baller")
             {
                 string portraitPath = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "portrait.png");
@@ -830,34 +947,41 @@ namespace FightingGame
                         using var full = Image.FromFile(portraitPath);
                         float scale = targetHeight / (float)full.Height;
                         int destW = Math.Max(1, (int)(full.Width * scale));
-                        var bmp = new Bitmap(destW, targetHeight);
+                        bmp = new Bitmap(destW, targetHeight);
                         using var g = Graphics.FromImage(bmp);
                         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                         g.PixelOffsetMode = PixelOffsetMode.Half;
                         g.DrawImage(full, 0, 0, destW, targetHeight);
-                        return bmp;
                     }
                     catch { }
                 }
             }
 
-            string path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "idle.png");
-            if (!File.Exists(path)) return null;
+            if (bmp == null)
+            {
+                string path = Path.Combine(AppContext.BaseDirectory, "Sprites", type, "idle.png");
+                if (!File.Exists(path)) return null;
 
-            using var idleImg = Image.FromFile(path);
-            int frameCount = Math.Max(1, FrameCountsFor(type)[AnimState.Idle]);
-            int frameW = Math.Max(1, idleImg.Width / frameCount);
-            int frameH = idleImg.Height;
+                using var idleImg = Image.FromFile(path);
+                int frameCount = Math.Max(1, FrameCountsFor(type)[AnimState.Idle]);
+                int frameW = Math.Max(1, idleImg.Width / frameCount);
+                int frameH = idleImg.Height;
 
-            float s = targetHeight / (float)frameH;
-            int dW = Math.Max(1, (int)(frameW * s));
+                float s = targetHeight / (float)frameH;
+                int dW = Math.Max(1, (int)(frameW * s));
 
-            var result = new Bitmap(dW, targetHeight);
-            using var gr = Graphics.FromImage(result);
-            gr.InterpolationMode = InterpolationMode.NearestNeighbor;
-            gr.PixelOffsetMode = PixelOffsetMode.Half;
-            gr.DrawImage(idleImg, new Rectangle(0, 0, dW, targetHeight), new Rectangle(0, 0, frameW, frameH), GraphicsUnit.Pixel);
-            return result;
+                bmp = new Bitmap(dW, targetHeight);
+                using var gr = Graphics.FromImage(bmp);
+                gr.InterpolationMode = InterpolationMode.NearestNeighbor;
+                gr.PixelOffsetMode = PixelOffsetMode.Half;
+                gr.DrawImage(idleImg, new Rectangle(0, 0, dW, targetHeight), new Rectangle(0, 0, frameW, frameH), GraphicsUnit.Pixel);
+            }
+
+            if (flipX && bmp != null)
+            {
+                bmp.RotateFlip(RotateFlipType.RotateNoneFlipX);
+            }
+            return bmp;
         }
 
         private void RefreshTileHighlights()
@@ -918,6 +1042,17 @@ namespace FightingGame
             p2Char = CreateCharacter(p2Type, p2Name);
             p1Char.OnLog += AppendLog;
             p2Char.OnLog += AppendLog;
+
+            // Load selected stage background
+            currentStageImage?.Dispose();
+            string stagePath = Path.Combine(AppContext.BaseDirectory, "Sprites", "Stages", AvailableStages[selectedStageIndex].FileName);
+            currentStageImage = File.Exists(stagePath) ? new Bitmap(stagePath) : null;
+
+            p1HudPortrait?.Dispose();
+            p2HudPortrait?.Dispose();
+            p1HudPortrait = LoadPortrait(p1Type, 58, flipX: false);
+            p2HudPortrait = LoadPortrait(p2Type, 58, flipX: true);
+            roundTimer = 99f;
 
             float groundY = canvas.Height * GroundYRatio;
             p1View = new FighterView(p1Char, canvas.Width * 0.28f, groundY, Color.DeepSkyBlue, facingSign: 1);
@@ -1156,13 +1291,21 @@ namespace FightingGame
                 g.TranslateTransform(-zoomCenter.X, -zoomCenter.Y);
             }
 
-            using (var sky = new LinearGradientBrush(canvas.ClientRectangle, Color.FromArgb(45, 50, 85), Color.FromArgb(20, 22, 40), LinearGradientMode.Vertical))
-                g.FillRectangle(sky, canvas.ClientRectangle);
+            if (currentStageImage != null)
+            {
+                g.InterpolationMode = InterpolationMode.Bilinear;
+                g.DrawImage(currentStageImage, canvas.ClientRectangle);
+            }
+            else
+            {
+                using (var sky = new LinearGradientBrush(canvas.ClientRectangle, Color.FromArgb(45, 50, 85), Color.FromArgb(20, 22, 40), LinearGradientMode.Vertical))
+                    g.FillRectangle(sky, canvas.ClientRectangle);
+            }
 
             float groundY = canvas.Height * GroundYRatio;
             using (var groundBrush = new SolidBrush(Color.FromArgb(40, 30, 30, 45)))
                 g.FillRectangle(groundBrush, 0, groundY, canvas.Width, canvas.Height - groundY);
-            using (var groundPen = new Pen(Color.FromArgb(90, 255, 255, 255), 2f))
+            using (var groundPen = new Pen(Color.FromArgb(50, 255, 255, 255), 2f))
                 g.DrawLine(groundPen, 0, groundY, canvas.Width, groundY);
 
             DrawChargingFighterEffectsFloor(g);
@@ -1175,7 +1318,8 @@ namespace FightingGame
             DrawBoomEffects(g);
             g.Restore(worldState);
 
-            DrawHud(g);
+            DrawSF4TopHud(g);
+            DrawSF4BottomHud(g);
             DrawCombatTicker(g);
             DrawControlsPill(g);
             DrawBanner(g);
@@ -1183,53 +1327,161 @@ namespace FightingGame
             DrawSpecialIntro(g);
         }
 
-        private void DrawHud(Graphics g)
+        private async Task HandleTimeOver()
+        {
+            if (gameOver || p1Char == null || p2Char == null) return;
+            gameOver = true;
+            AppendLog("--- TIME UP! ---");
+            await ShowBanner("TIME OVER");
+
+            if (MathF.Abs(p1Char.GetHP() - p2Char.GetHP()) < 0.5f)
+            {
+                lblKO.Text = "TIME OVER";
+                lblWinner.Text = "DRAW GAME";
+            }
+            else if (p1Char.GetHP() > p2Char.GetHP())
+            {
+                p1RoundsWon++;
+                lblKO.Text = "TIME OVER";
+                lblWinner.Text = $"{p1Char.GetName().ToUpper()} WINS!";
+            }
+            else
+            {
+                p2RoundsWon++;
+                lblKO.Text = "TIME OVER";
+                lblWinner.Text = $"{p2Char.GetName().ToUpper()} WINS!";
+            }
+
+            await Task.Delay(1100);
+            ShowOnly(pnlResult);
+        }
+
+        // =========================================================
+        // Street Fighter IV Battle HUD Implementation
+        // =========================================================
+        private void DrawSF4TopHud(Graphics g)
         {
             if (p1View == null || p2View == null) return;
 
-            int barW = Math.Clamp((int)(canvas.Width * 0.36f), 280, 480);
-            const int barH = 26, marginX = 24, y = 22;
-            const int rageBarH = 10, rageGap = 5;
+            float cx = canvas.Width / 2f;
+            float topY = 16f;
 
-            DrawHealthBar(g, marginX, y, barW, barH, p1View, alignRight: false);
-            DrawHealthBar(g, canvas.Width - marginX - barW, y, barW, barH, p2View, alignRight: true);
-            DrawRageBar(g, marginX, y + barH + rageGap, barW, rageBarH, p1View, isP1: true);
-            DrawRageBar(g, canvas.Width - marginX - barW, y + barH + rageGap, barW, rageBarH, p2View, isP1: false);
+            // 1. Center K.O. Badge & 99s Round Timer (Iconic SF4 Style)
+            DrawSF4KoTimer(g, cx, topY);
 
-            if (p1View.Character is Gunner g1)
-                DrawGunnerAmmoHud(g, marginX, y + barH + rageGap + rageBarH + 6, barW, g1, alignRight: false, "R: Reload");
-            if (p2View.Character is Gunner g2)
-                DrawGunnerAmmoHud(g, canvas.Width - marginX - barW, y + barH + rageGap + rageBarH + 6, barW, g2, alignRight: true, "P: Reload");
+            // 2. Left (P1) and Right (P2) Health Bars with Slanted Inward Edges & Red Ghost Damage
+            float barH = 26f;
+            float barY = topY + 14f;
+            float portSize = 58f;
+            float p1PortX = 22f;
+            float p2PortX = canvas.Width - 22f - portSize;
 
-            // Center VS & Round Emblem
-            using var vsFont = new Font("Segoe UI Black", 20f, FontStyle.Bold | FontStyle.Italic);
-            using var vsShadow = new SolidBrush(Color.FromArgb(180, Color.Black));
-            using var vsBrush = new SolidBrush(Color.Gold);
-            var vsSize = g.MeasureString("VS", vsFont);
-            float vsX = canvas.Width / 2f - vsSize.Width / 2f;
-            g.DrawString("VS", vsFont, vsShadow, vsX + 2f, y + 2f);
-            g.DrawString("VS", vsFont, vsBrush, vsX, y);
+            float p1BarLeft = p1PortX + portSize + 10f;
+            float p1BarRight = cx - 44f;
+            float p1BarW = Math.Max(120f, p1BarRight - p1BarLeft);
 
-            using var roundFont = new Font("Segoe UI Black", 9.5f, FontStyle.Bold);
-            string roundText = $"ROUND {Round}";
-            var rSize = g.MeasureString(roundText, roundFont);
-            float rX = canvas.Width / 2f - rSize.Width / 2f;
-            float rY = y + vsSize.Height - 2f;
-            g.DrawString(roundText, roundFont, Brushes.WhiteSmoke, rX, rY);
+            float p2BarLeft = cx + 44f;
+            float p2BarRight = p2PortX - 10f;
+            float p2BarW = Math.Max(120f, p2BarRight - p2BarLeft);
 
-            // Win round indicators (arcade dots)
-            float pipY = rY + rSize.Height + 2f;
-            using var activePip = new SolidBrush(Color.Gold);
-            using var inactivePip = new SolidBrush(Color.FromArgb(140, 40, 45, 65));
-            using var pipBorder = new Pen(Color.FromArgb(180, Color.White), 1f);
-            float pipSz = 7f;
-            g.FillEllipse(activePip, canvas.Width / 2f - 12f, pipY, pipSz, pipSz);
-            g.DrawEllipse(pipBorder, canvas.Width / 2f - 12f, pipY, pipSz, pipSz);
-            g.FillEllipse(inactivePip, canvas.Width / 2f + 5f, pipY, pipSz, pipSz);
-            g.DrawEllipse(pipBorder, canvas.Width / 2f + 5f, pipY, pipSz, pipSz);
+            DrawSF4HealthBar(g, p1BarLeft, barY, p1BarW, barH, p1View, isP1: true);
+            DrawSF4HealthBar(g, p2BarLeft, barY, p2BarW, barH, p2View, isP1: false);
+
+            // 3. Slanted Character Portrait Plates with Player Badges
+            DrawSF4PortraitPlate(g, p1PortX, topY + 2f, portSize, p1HudPortrait, isP1: true, p1View);
+            DrawSF4PortraitPlate(g, p2PortX, topY + 2f, portSize, p2HudPortrait, isP1: false, p2View);
+
+            // 4. Sumi-e Japanese Calligraphy Character Names Under Health Bars
+            DrawSF4CalligraphyName(g, p1BarLeft, barY + barH + 4f, p1View, isP1: true);
+            DrawSF4CalligraphyName(g, p2BarLeft + p2BarW, barY + barH + 4f, p2View, isP1: false);
         }
 
-        private static void DrawHealthBar(Graphics g, int x, int y, int w, int h, FighterView v, bool alignRight)
+        private void DrawSF4KoTimer(Graphics g, float cx, float topY)
+        {
+            float badgeW = 76f;
+            float badgeH = 68f;
+            float bx = cx - badgeW / 2f;
+            var badgeRect = new RectangleF(bx, topY, badgeW, badgeH);
+
+            // Dark octagonal / capsule backing plate
+            using (var backBrush = new SolidBrush(Color.FromArgb(230, 20, 16, 26)))
+            {
+                using var backPath = CreateBeveledPath(badgeRect, 10f);
+                g.FillPath(backBrush, backPath);
+                using var backPen = new Pen(Color.FromArgb(200, 70, 70, 90), 2f);
+                g.DrawPath(backPen, backPath);
+            }
+
+            // Top K.O. Red Emblem Ribbon
+            var koRect = new RectangleF(bx + 4f, topY + 4f, badgeW - 8f, 22f);
+            using (var koBrush = new LinearGradientBrush(koRect, Color.FromArgb(255, 220, 30, 30), Color.FromArgb(255, 140, 10, 10), LinearGradientMode.Vertical))
+            {
+                using var koPath = CreateBeveledPath(koRect, 5f);
+                g.FillPath(koBrush, koPath);
+                using var koPen = new Pen(Color.FromArgb(255, 255, 220, 80), 1.2f);
+                g.DrawPath(koPen, koPath);
+            }
+
+            // "K.O." golden text with shadow
+            using (var koFont = new Font("Segoe UI Black", 11.5f, FontStyle.Bold | FontStyle.Italic))
+            {
+                string koText = "K.O.";
+                var koSz = g.MeasureString(koText, koFont);
+                float kx = cx - koSz.Width / 2f;
+                float ky = topY + 4f + (22f - koSz.Height) / 2f;
+                using var kShadow = new SolidBrush(Color.FromArgb(200, Color.Black));
+                g.DrawString(koText, koFont, kShadow, kx + 1.2f, ky + 1.2f);
+                using var kFill = new SolidBrush(Color.FromArgb(255, 255, 240, 120));
+                g.DrawString(koText, koFont, kFill, kx, ky);
+            }
+
+            // Giant Countdown Timer (SF4 Golden Yellow Digits)
+            int secondsLeft = Math.Clamp((int)Math.Ceiling(roundTimer), 0, 99);
+            string timeStr = secondsLeft.ToString("00");
+
+            Color timeCol = secondsLeft <= 10 ? Color.FromArgb(255, 60, 60) : Color.FromArgb(255, 225, 40);
+            using (var timerFont = new Font("Segoe UI Black", 21f, FontStyle.Bold))
+            {
+                var tSz = g.MeasureString(timeStr, timerFont);
+                float tx = cx - tSz.Width / 2f;
+                float ty = topY + 24f;
+                using var tShadow = new SolidBrush(Color.FromArgb(240, Color.Black));
+                g.DrawString(timeStr, timerFont, tShadow, tx + 2f, ty + 2f);
+                using var tBrush = new SolidBrush(timeCol);
+                g.DrawString(timeStr, timerFont, tBrush, tx, ty);
+            }
+
+            // Round Win Pips (V / dots under the timer plate)
+            float pipY = topY + badgeH + 4f;
+            DrawRoundPip(g, cx - 18f, pipY, p1RoundsWon >= 1, Color.Cyan);
+            DrawRoundPip(g, cx + 10f, pipY, p2RoundsWon >= 1, Color.HotPink);
+        }
+
+        private static void DrawRoundPip(Graphics g, float x, float y, bool won, Color color)
+        {
+            float sz = 9f;
+            using var brush = new SolidBrush(won ? color : Color.FromArgb(120, 40, 45, 60));
+            using var pen = new Pen(won ? Color.White : Color.FromArgb(100, 100, 120), 1.2f);
+            g.FillEllipse(brush, x, y, sz, sz);
+            g.DrawEllipse(pen, x, y, sz, sz);
+        }
+
+        private static GraphicsPath CreateBeveledPath(RectangleF rect, float bevel)
+        {
+            var path = new GraphicsPath();
+            path.AddLine(rect.X + bevel, rect.Y, rect.Right - bevel, rect.Y);
+            path.AddLine(rect.Right - bevel, rect.Y, rect.Right, rect.Y + bevel);
+            path.AddLine(rect.Right, rect.Y + bevel, rect.Right, rect.Bottom - bevel);
+            path.AddLine(rect.Right, rect.Bottom - bevel, rect.Right - bevel, rect.Bottom);
+            path.AddLine(rect.Right - bevel, rect.Bottom, rect.X + bevel, rect.Bottom);
+            path.AddLine(rect.X + bevel, rect.Bottom, rect.X, rect.Bottom - bevel);
+            path.AddLine(rect.X, rect.Bottom - bevel, rect.X, rect.Y + bevel);
+            path.AddLine(rect.X, rect.Y + bevel, rect.X + bevel, rect.Y);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static void DrawSF4HealthBar(Graphics g, float x, float y, float w, float h, FighterView v, bool isP1)
         {
             float maxHp = v.Character.GetMaxHP();
             float curRatio = maxHp <= 0 ? 0 : Math.Clamp(v.DisplayHp / maxHp, 0f, 1f);
@@ -1237,129 +1489,345 @@ namespace FightingGame
 
             var barRect = new RectangleF(x, y, w, h);
 
-            // 1. Dark chamfered background with inner shadow
-            using (var bg = new SolidBrush(Color.FromArgb(230, 16, 18, 28)))
-                g.FillRectangle(bg, barRect);
-
-            // 2. Delayed Red Damage Lag Bar (shows recent chunk lost)
-            if (lagRatio > curRatio + 0.005f)
+            // Dark metallic container bevel
+            using (var bgBrush = new SolidBrush(Color.FromArgb(240, 16, 18, 26)))
             {
-                int lagW = (int)(w * lagRatio);
-                using var lagBrush = new SolidBrush(Color.FromArgb(235, 230, 45, 65));
-                if (!alignRight)
-                    g.FillRectangle(lagBrush, x, y, lagW, h);
-                else
-                    g.FillRectangle(lagBrush, x + (w - lagW), y, lagW, h);
+                g.FillRectangle(bgBrush, barRect);
             }
 
-            // 3. Current Live HP bar with smooth color gradient
-            int curW = (int)(w * curRatio);
-            if (curW > 0)
+            // Delayed Red Damage Lag Bar (SF4 red impact chunk)
+            if (lagRatio > curRatio + 0.005f)
             {
-                Color startCol = curRatio > 0.5f ? Color.LimeGreen : curRatio > 0.25f ? Color.Gold : Color.Crimson;
-                Color endCol = curRatio > 0.5f ? Color.FromArgb(0, 220, 180) : curRatio > 0.25f ? Color.DarkOrange : Color.DarkRed;
-                var fillRect = !alignRight
+                float lagW = w * lagRatio;
+                var lagRect = isP1
+                    ? new RectangleF(x, y, lagW, h)
+                    : new RectangleF(x + (w - lagW), y, lagW, h);
+
+                using var lagBrush = new LinearGradientBrush(lagRect, Color.FromArgb(240, 220, 40, 30), Color.FromArgb(240, 160, 20, 20), LinearGradientMode.Vertical);
+                g.FillRectangle(lagBrush, lagRect);
+            }
+
+            // Current HP Bar (SF4 Signature Golden Yellow / Amber, turning red when critical)
+            float curW = w * curRatio;
+            if (curW > 0.5f)
+            {
+                var curRect = isP1
                     ? new RectangleF(x, y, curW, h)
                     : new RectangleF(x + (w - curW), y, curW, h);
 
-                using var fillBrush = new LinearGradientBrush(fillRect, startCol, endCol, LinearGradientMode.Horizontal);
-                g.FillRectangle(fillBrush, fillRect);
+                Color topGold = curRatio > 0.30f ? Color.FromArgb(255, 255, 220, 60) : Color.FromArgb(255, 255, 90, 40);
+                Color botGold = curRatio > 0.30f ? Color.FromArgb(255, 215, 140, 10) : Color.FromArgb(255, 180, 20, 10);
 
-                // Top glossy sheen highlight
-                using var sheenBrush = new SolidBrush(Color.FromArgb(70, Color.White));
-                g.FillRectangle(sheenBrush, fillRect.X, fillRect.Y, fillRect.Width, h * 0.4f);
+                using (var curBrush = new LinearGradientBrush(curRect, topGold, botGold, LinearGradientMode.Vertical))
+                {
+                    g.FillRectangle(curBrush, curRect);
+                }
+
+                // Glossy glass top sheen
+                using var sheen = new SolidBrush(Color.FromArgb(80, Color.White));
+                g.FillRectangle(sheen, curRect.X, curRect.Y, curRect.Width, h * 0.42f);
             }
 
-            // 4. Outer Cyber Border (Cyan for P1, HotPink for P2)
-            Color frameCol = !alignRight ? Color.Cyan : Color.HotPink;
-            using (var border = new Pen(Color.FromArgb(200, frameCol), 2f))
-                g.DrawRectangle(border, x, y, w, h);
-
-            // 5. Player Tag & Character Name Header
-            string nameText = v.Character.GetName().ToUpper();
-            string pTag = !alignRight ? "P1" : "P2";
-            Color tagCol = !alignRight ? Color.Cyan : Color.HotPink;
-
-            using var nameFont = new Font("Segoe UI Black", 10.5f, FontStyle.Bold);
-            using var tagFont = new Font("Segoe UI Black", 8.5f, FontStyle.Bold);
-            var nameSize = g.MeasureString(nameText, nameFont);
-            var tagSize = g.MeasureString(pTag, tagFont);
-
-            float headerY = y - nameSize.Height - 3f;
-
-            if (!alignRight)
+            // Metallic Inward Slanted Trim Border
+            using (var borderPen = new Pen(Color.FromArgb(230, 200, 190, 160), 2f))
             {
-                // P1 Tag Badge + Name
-                var tagRect = new RectangleF(x, headerY + 1f, tagSize.Width + 8f, tagSize.Height);
-                using (var tagBg = new SolidBrush(Color.FromArgb(220, tagCol)))
-                    g.FillRectangle(tagBg, tagRect);
-                using (var tagBrush = new SolidBrush(Color.FromArgb(16, 18, 28)))
-                    g.DrawString(pTag, tagFont, tagBrush, tagRect.X + 4f, tagRect.Y);
-
-                float nameX = tagRect.Right + 6f;
-                using var shadowBrush = new SolidBrush(Color.FromArgb(180, Color.Black));
-                g.DrawString(nameText, nameFont, shadowBrush, nameX + 1.5f, headerY + 1.5f);
-                g.DrawString(nameText, nameFont, Brushes.White, nameX, headerY);
+                g.DrawRectangle(borderPen, x, y, w, h);
             }
-            else
-            {
-                // Name + P2 Tag Badge
-                var tagRect = new RectangleF(x + w - tagSize.Width - 8f, headerY + 1f, tagSize.Width + 8f, tagSize.Height);
-                using (var tagBg = new SolidBrush(Color.FromArgb(220, tagCol)))
-                    g.FillRectangle(tagBg, tagRect);
-                using (var tagBrush = new SolidBrush(Color.FromArgb(16, 18, 28)))
-                    g.DrawString(pTag, tagFont, tagBrush, tagRect.X + 4f, tagRect.Y);
-
-                float nameX = tagRect.Left - nameSize.Width - 6f;
-                using var shadowBrush = new SolidBrush(Color.FromArgb(180, Color.Black));
-                g.DrawString(nameText, nameFont, shadowBrush, nameX + 1.5f, headerY + 1.5f);
-                g.DrawString(nameText, nameFont, Brushes.White, nameX, headerY);
-            }
-
-            // 6. Centered HP Numbers with Drop Shadow
-            string hpText = $"{Math.Max(0, (int)Math.Round(v.DisplayHp))} / {(int)maxHp}";
-            using var hpFont = new Font("Consolas", 9f, FontStyle.Bold);
-            var hpSize = g.MeasureString(hpText, hpFont);
-            float hpX = x + w / 2f - hpSize.Width / 2f;
-            float hpY = y + h / 2f - hpSize.Height / 2f;
-            using var hpShadow = new SolidBrush(Color.FromArgb(210, Color.Black));
-            g.DrawString(hpText, hpFont, hpShadow, hpX + 1.2f, hpY + 1.2f);
-            g.DrawString(hpText, hpFont, Brushes.White, hpX, hpY);
         }
 
-        private static void DrawRageBar(Graphics g, int x, int y, int w, int h, FighterView v, bool isP1)
+        private static void DrawSF4PortraitPlate(Graphics g, float x, float y, float size, Bitmap? portrait, bool isP1, FighterView v)
+        {
+            // Slanted trapezoid frame for SF4 portrait
+            float slant = 10f;
+            PointF[] framePts = isP1
+                ? new PointF[] { new(x, y), new(x + size, y), new(x + size - slant, y + size), new(x - slant, y + size) }
+                : new PointF[] { new(x + slant, y), new(x + size + slant, y), new(x + size, y + size), new(x, y + size) };
+
+            // Fill dark frame
+            using (var frameBg = new SolidBrush(Color.FromArgb(240, 22, 24, 36)))
+                g.FillPolygon(frameBg, framePts);
+
+            // Clip portrait inside the slanted frame
+            var prevClip = g.Clip;
+            using (var path = new GraphicsPath())
+            {
+                path.AddPolygon(framePts);
+                g.SetClip(path, CombineMode.Intersect);
+
+                if (portrait != null)
+                {
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    float drawW = size;
+                    float drawH = size;
+                    float imgRatio = (float)portrait.Width / portrait.Height;
+                    if (imgRatio > 1f) drawW = size * imgRatio;
+                    float px = x + (size - drawW) / 2f;
+                    g.DrawImage(portrait, px, y, drawW, drawH);
+                }
+                else
+                {
+                    using var tBrush = new SolidBrush(v.TeamColor);
+                    g.FillEllipse(tBrush, x + 6f, y + 6f, size - 12f, size - 12f);
+                }
+                g.Clip = prevClip;
+            }
+
+            // Metallic colored border (Cyan for P1, Hot Pink for P2)
+            Color borderCol = isP1 ? Color.FromArgb(255, 0, 210, 255) : Color.FromArgb(255, 255, 45, 120);
+            using (var borderPen = new Pen(borderCol, 2.5f))
+                g.DrawPolygon(borderPen, framePts);
+
+            // "PLAYER 1" / "PLAYER 2" Header Tag above portrait
+            string tagText = isP1 ? "PLAYER 1" : "PLAYER 2";
+            using var tagFont = new Font("Segoe UI Black", 8f, FontStyle.Bold);
+            var tagSz = g.MeasureString(tagText, tagFont);
+            float tx = isP1 ? x - 4f : x + size - tagSz.Width + 4f;
+            float ty = y - tagSz.Height - 1f;
+
+            using (var tagBg = new SolidBrush(Color.FromArgb(220, borderCol)))
+                g.FillRectangle(tagBg, tx - 2f, ty, tagSz.Width + 4f, tagSz.Height);
+            using var tagTextBrush = new SolidBrush(Color.FromArgb(20, 20, 30));
+            g.DrawString(tagText, tagFont, tagTextBrush, tx, ty);
+        }
+
+        private static void DrawSF4CalligraphyName(Graphics g, float anchorX, float y, FighterView v, bool isP1)
+        {
+            string name = v.Character.GetName().ToUpper();
+            using var font = new Font("Segoe UI Black", 13.5f, FontStyle.Bold | FontStyle.Italic);
+            var sz = g.MeasureString(name, font);
+
+            float x = isP1 ? anchorX + 4f : anchorX - sz.Width - 4f;
+
+            // Street Fighter IV Sumi-e Japanese Ink Brush Outline Effect
+            using (var inkBrush = new SolidBrush(Color.FromArgb(240, 10, 8, 14)))
+            {
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    for (int dy = -2; dy <= 2; dy++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        g.DrawString(name, font, inkBrush, x + dx, y + dy);
+                    }
+                }
+            }
+
+            // Core fill in bright white/cream
+            using (var fillBrush = new SolidBrush(Color.FromArgb(255, 255, 252, 235)))
+            {
+                g.DrawString(name, font, fillBrush, x, y);
+            }
+
+            // Subtle HP sub-numbers
+            using var hpFont = new Font("Consolas", 8.5f, FontStyle.Bold);
+            string hpStr = $"{(int)Math.Max(0, Math.Round(v.DisplayHp))} / {(int)v.Character.GetMaxHP()}";
+            var hpSz = g.MeasureString(hpStr, hpFont);
+            float hx = isP1 ? x + sz.Width + 12f : x - hpSz.Width - 12f;
+            float hy = y + (sz.Height - hpSz.Height) / 2f + 1f;
+            using var hpShadow = new SolidBrush(Color.FromArgb(200, Color.Black));
+            g.DrawString(hpStr, hpFont, hpShadow, hx + 1f, hy + 1f);
+            using var hpBrush = new SolidBrush(Color.FromArgb(200, Color.Gainsboro));
+            g.DrawString(hpStr, hpFont, hpBrush, hx, hy);
+        }
+
+        private void DrawSF4BottomHud(Graphics g)
+        {
+            if (p1View == null || p2View == null) return;
+
+            float bottomY = canvas.Height - 64f;
+
+            // P1 Bottom HUD: Circular Revenge Dial on Left, 4-Segment Super Bar to its right
+            float p1RevengeX = 26f;
+            float p1DialSize = 54f;
+            DrawSF4RevengeDial(g, p1RevengeX, bottomY - 6f, p1DialSize, p1View, isP1: true);
+
+            float p1SuperX = p1RevengeX + p1DialSize + 12f;
+            float superW = Math.Min(260f, (canvas.Width / 2f) - p1SuperX - 40f);
+            float superH = 22f;
+            DrawSF4SuperBar(g, p1SuperX, bottomY + 8f, superW, superH, p1View, isP1: true);
+
+            // P2 Bottom HUD: 4-Segment Super Bar on inner right, Circular Revenge Dial on far right
+            float p2DialSize = 54f;
+            float p2RevengeX = canvas.Width - 26f - p2DialSize;
+            DrawSF4RevengeDial(g, p2RevengeX, bottomY - 6f, p2DialSize, p2View, isP1: false);
+
+            float p2SuperX = p2RevengeX - 12f - superW;
+            DrawSF4SuperBar(g, p2SuperX, bottomY + 8f, superW, superH, p2View, isP1: false);
+
+            // Gunner Ammo (if either fighter is Gunner)
+            if (p1View.Character is Gunner g1)
+            {
+                DrawSF4GunnerAmmo(g, p1SuperX, bottomY - 14f, superW, g1, alignRight: false, "R: Reload");
+            }
+            if (p2View.Character is Gunner g2)
+            {
+                DrawSF4GunnerAmmo(g, p2SuperX, bottomY - 14f, superW, g2, alignRight: true, "P: Reload");
+            }
+        }
+
+        private static void DrawSF4RevengeDial(Graphics g, float x, float y, float size, FighterView v, bool isP1)
+        {
+            // SF4 Revenge (Ultra) builds as fighter takes damage
+            float damageTaken = v.Character.GetMaxHP() - v.DisplayHp;
+            float revengeRatio = Math.Clamp(damageTaken / (v.Character.GetMaxHP() * 0.70f), 0f, 1f);
+            bool ultraReady = revengeRatio >= 0.50f;
+            bool ultraMax = revengeRatio >= 0.999f;
+
+            var dialRect = new RectangleF(x, y, size, size);
+
+            // Outer dark metallic disc
+            using (var discBg = new SolidBrush(Color.FromArgb(235, 18, 16, 26)))
+                g.FillEllipse(discBg, dialRect);
+
+            // Circular Revenge gauge arc
+            float sweepAngle = 360f * revengeRatio;
+            if (sweepAngle > 2f)
+            {
+                Color arcCol = ultraMax
+                    ? Color.FromArgb(255, 255, 215, 0)
+                    : ultraReady ? Color.FromArgb(255, 255, 80, 20) : Color.FromArgb(220, 200, 40, 30);
+
+                using var arcPen = new Pen(arcCol, 5.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawArc(arcPen, x + 3.5f, y + 3.5f, size - 7f, size - 7f, -90f, isP1 ? sweepAngle : -sweepAngle);
+            }
+
+            // Outer metallic rim
+            Color rimCol = ultraReady ? Color.Gold : Color.FromArgb(160, 100, 110, 130);
+            using (var rimPen = new Pen(rimCol, ultraReady ? 2.5f : 1.5f))
+                g.DrawEllipse(rimPen, dialRect);
+
+            // Center Text: "REVENGE" or flashing "ULTRA"
+            string label = ultraReady ? "ULTRA" : "REVENGE";
+            using var font = new Font("Segoe UI Black", ultraReady ? 8.5f : 6.8f, FontStyle.Bold);
+            var sz = g.MeasureString(label, font);
+            float lx = x + (size - sz.Width) / 2f;
+            float ly = y + (size - sz.Height) / 2f;
+
+            using var textShadow = new SolidBrush(Color.FromArgb(220, Color.Black));
+            g.DrawString(label, font, textShadow, lx + 1f, ly + 1f);
+
+            Color textCol = ultraReady ? Color.FromArgb(255, 255, 235, 100) : Color.Gainsboro;
+            using var textBrush = new SolidBrush(textCol);
+            g.DrawString(label, font, textBrush, lx, ly);
+        }
+
+        private static void DrawSF4SuperBar(Graphics g, float x, float y, float w, float h, FighterView v, bool isP1)
         {
             const float rageMax = 100f;
             float ratio = Math.Clamp(v.Rage / rageMax, 0f, 1f);
             bool full = ratio >= 0.999f;
 
-            using (var bg = new SolidBrush(Color.FromArgb(220, 16, 18, 28)))
-                g.FillRectangle(bg, x, y, w, h);
+            var barRect = new RectangleF(x, y, w, h);
 
-            int filledW = (int)(w * ratio);
-            if (filledW > 0)
+            // Background container
+            using (var bgBrush = new SolidBrush(Color.FromArgb(235, 14, 16, 24)))
+                g.FillRectangle(bgBrush, barRect);
+
+            // 4 Segments in SF4 Super Gauge
+            const int segmentCount = 4;
+            float segW = (w - (segmentCount - 1) * 3f) / segmentCount;
+
+            for (int s = 0; s < segmentCount; s++)
             {
-                Color startRage = full ? Color.Gold : isP1 ? Color.DarkTurquoise : Color.DeepPink;
-                Color endRage = full ? Color.OrangeRed : isP1 ? Color.Cyan : Color.HotPink;
-                var rRect = !isP1
-                    ? new RectangleF(x + (w - filledW), y, filledW, h)
-                    : new RectangleF(x, y, filledW, h);
+                float segMin = s / (float)segmentCount;
+                float segMax = (s + 1) / (float)segmentCount;
 
-                using var rBrush = new LinearGradientBrush(rRect, startRage, endRage, LinearGradientMode.Horizontal);
-                g.FillRectangle(rBrush, rRect);
+                float segX = !isP1
+                    ? x + (segmentCount - 1 - s) * (segW + 3f)
+                    : x + s * (segW + 3f);
+
+                var sRect = new RectangleF(segX, y, segW, h);
+
+                // Check fill of this segment
+                if (ratio >= segMax)
+                {
+                    // Full segment
+                    Color col1 = full ? Color.FromArgb(255, 255, 215, 0) : Color.FromArgb(255, 0, 190, 255);
+                    Color col2 = full ? Color.FromArgb(255, 255, 90, 20) : Color.FromArgb(255, 0, 110, 220);
+                    using var sBrush = new LinearGradientBrush(sRect, col1, col2, LinearGradientMode.Vertical);
+                    g.FillRectangle(sBrush, sRect);
+                }
+                else if (ratio > segMin)
+                {
+                    // Partial segment
+                    float p = (ratio - segMin) / (segMax - segMin);
+                    float partW = segW * p;
+                    var pRect = !isP1
+                        ? new RectangleF(segX + (segW - partW), y, partW, h)
+                        : new RectangleF(segX, y, partW, h);
+
+                    Color col1 = Color.FromArgb(255, 0, 190, 255);
+                    Color col2 = Color.FromArgb(255, 0, 110, 220);
+                    using var sBrush = new LinearGradientBrush(pRect, col1, col2, LinearGradientMode.Vertical);
+                    g.FillRectangle(sBrush, pRect);
+                }
+
+                // Segment border
+                using var segPen = new Pen(Color.FromArgb(160, 80, 90, 110), 1.2f);
+                g.DrawRectangle(segPen, segX, y, segW, h);
             }
 
-            Color borderCol = full ? Color.Gold : Color.FromArgb(140, 120, 140, 180);
-            using (var border = new Pen(borderCol, full ? 2f : 1.2f))
-                g.DrawRectangle(border, x, y, w, h);
+            // Outer border
+            Color borderCol = full ? Color.Gold : Color.FromArgb(180, 120, 140, 170);
+            using (var borderPen = new Pen(borderCol, full ? 2f : 1.2f))
+                g.DrawRectangle(borderPen, x, y, w, h);
 
+            // Flashing "SUPER COMBO" / "MAX" when 100% full
             if (full)
             {
-                using var readyFont = new Font("Segoe UI Black", 7f, FontStyle.Bold);
-                string readyText = "SUPER READY";
-                var size = g.MeasureString(readyText, readyFont);
-                using var readyBrush = new SolidBrush(Color.Black);
-                g.DrawString(readyText, readyFont, readyBrush, x + w / 2f - size.Width / 2f, y + h / 2f - size.Height / 2f);
+                using var readyFont = new Font("Segoe UI Black", 8.5f, FontStyle.Bold | FontStyle.Italic);
+                string readyText = "SUPER COMBO MAX";
+                var rSz = g.MeasureString(readyText, readyFont);
+                float rx = x + (w - rSz.Width) / 2f;
+                float ry = y + (h - rSz.Height) / 2f;
+                using var rShadow = new SolidBrush(Color.Black);
+                g.DrawString(readyText, readyFont, rShadow, rx + 1.2f, ry + 1.2f);
+                using var rFill = new SolidBrush(Color.White);
+                g.DrawString(readyText, readyFont, rFill, rx, ry);
+            }
+            else
+            {
+                using var labelFont = new Font("Segoe UI Black", 7.2f, FontStyle.Bold);
+                string labelText = "SUPER";
+                var lSz = g.MeasureString(labelText, labelFont);
+                float lx = !isP1 ? x + w - lSz.Width - 4f : x + 4f;
+                float ly = y + (h - lSz.Height) / 2f;
+                using var lBrush = new SolidBrush(Color.FromArgb(180, Color.LightCyan));
+                g.DrawString(labelText, labelFont, lBrush, lx, ly);
+            }
+        }
+
+        private static void DrawSF4GunnerAmmo(Graphics g, float x, float y, float w, Gunner gunner, bool alignRight, string reloadHint)
+        {
+            if (gunner.IsReloading)
+            {
+                using var font = new Font("Segoe UI Black", 8.5f, FontStyle.Bold);
+                using var brush = new SolidBrush(Color.Gold);
+                string text = "⚡ RELOADING... ⚡";
+                var sz = g.MeasureString(text, font);
+                float tx = alignRight ? x + w - sz.Width : x;
+                g.DrawString(text, font, brush, tx, y);
+            }
+            else
+            {
+                using var font = new Font("Segoe UI", 8f, FontStyle.Bold);
+                string label = $"AMMO {gunner.CurrentAmmo}/{gunner.MaxAmmo} [{reloadHint}]";
+                using var brush = new SolidBrush(Color.Gainsboro);
+                var sz = g.MeasureString(label, font);
+                float lx = alignRight ? x + w - sz.Width : x;
+                g.DrawString(label, font, brush, lx, y);
+
+                int pipW = 8, pipH = 12, pipGap = 4;
+                float startPipX = alignRight ? lx - (gunner.MaxAmmo * (pipW + pipGap)) - 6f : lx + sz.Width + 8f;
+                for (int i = 0; i < gunner.MaxAmmo; i++)
+                {
+                    bool loaded = i < gunner.CurrentAmmo;
+                    float px = startPipX + i * (pipW + pipGap);
+                    var bulletRect = new RectangleF(px, y, pipW, pipH);
+                    using var pipBrush = new SolidBrush(loaded ? Color.Gold : Color.FromArgb(70, 70, 70));
+                    using var pipPen = new Pen(loaded ? Color.Yellow : Color.FromArgb(100, 100, 100), 1f);
+                    g.FillRectangle(pipBrush, bulletRect);
+                    g.DrawRectangle(pipPen, px, y, pipW, pipH);
+                }
             }
         }
 
@@ -2756,26 +3224,35 @@ namespace FightingGame
             int h = pnlCharSelect.ClientSize.Height;
             if (w <= 0 || h <= 0) return;
 
-            btnBackMenu.Location = new Point(24, 25);
-            lblSelectTitle.Location = new Point((w - lblSelectTitle.Width) / 2, 25);
+            btnBackMenu.Location = new Point(24, 20);
+            lblSelectTitle.Location = new Point((w - lblSelectTitle.Width) / 2, 20);
 
-            const int tileW = 150, gap = 20;
+            const int tileW = 150, tileH = 165, gap = 18;
             int totalTilesW = tileW * RosterNames.Length + gap * (RosterNames.Length - 1);
             int startX = Math.Max(24, (w - totalTilesW) / 2);
 
-            lblP1.Location = new Point(startX, 90);
-            lblP2.Location = new Point(startX, 335);
+            lblP1.Location = new Point(startX, 68);
+            lblP2.Location = new Point(startX, 276);
 
             for (int i = 0; i < RosterNames.Length; i++)
             {
                 string type = RosterNames[i];
                 int x = startX + i * (tileW + gap);
-                if (p1Tiles.TryGetValue(type, out var p1b)) p1b.Location = new Point(x, 125);
-                if (p2Tiles.TryGetValue(type, out var p2b)) p2b.Location = new Point(x, 370);
+                if (p1Tiles.TryGetValue(type, out var p1b))
+                {
+                    p1b.Size = new Size(tileW, tileH);
+                    p1b.Location = new Point(x, 96);
+                }
+                if (p2Tiles.TryGetValue(type, out var p2b))
+                {
+                    p2b.Size = new Size(tileW, tileH);
+                    p2b.Location = new Point(x, 304);
+                }
             }
 
-            btnFight.Location = new Point(startX, 580);
-            btnFight.Size = new Size(totalTilesW, 48);
+            pnlStageBox.Location = new Point((w - pnlStageBox.Width) / 2, 486);
+            btnFight.Location = new Point(startX, 560);
+            btnFight.Size = new Size(totalTilesW, 46);
         }
 
         private void LayoutVersusPanel()
